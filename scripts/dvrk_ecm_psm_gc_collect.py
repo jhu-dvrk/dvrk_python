@@ -27,6 +27,11 @@ def dvrk_ecm_psm_gc_collect(ral, name, expected_interval):
                      expected_interval = expected_interval)
     ral.check_connections()
 
+    if name == 'ECM':
+        print('Make sure the endoscope is on the ECM')
+    else:
+        print('Make sure the instrument and sterile adapter are on the PSM')
+
     # file to save data
     now = datetime.datetime.now()
     now_string = now.strftime("%Y-%m-%d-%H-%M")
@@ -68,11 +73,16 @@ def dvrk_ecm_psm_gc_collect(ral, name, expected_interval):
                 else:
                     positions[index] = future
                     next_dimension_increment = False
-
-        robot.move_jp(numpy.array([positions[0],
-                                   positions[1],
-                                   positions[2],
-                                   0.0])).wait()
+        if name == 'ECM':
+            robot.move_jp(numpy.array([positions[0],
+                                       positions[1],
+                                       positions[2],
+                                       0.0])).wait()
+        else:
+            robot.move_jp(numpy.array([positions[0],
+                                       positions[1],
+                                       positions[2],
+                                       0.0, 0.0, 0.0])).wait()
         time.sleep(1.0)
         writer.writerow([robot.measured_jp()[0],
                          robot.measured_jp()[1],
