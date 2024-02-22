@@ -227,10 +227,7 @@ class potentiometer_calibration:
                 for sample in range(nb_samples_per_position):
                     last_pot = self.potentiometers.measured_jp()
                     last_enc = self.encoders.measured_jp()
-                    for axis in range(nb_axis):            request = cisst_msgs.srv.ConvertFloat64Array.Request()
-            request.input = offsets
-            response = a_to_j_service.call(request)
-            offsets = response.output
+                    for axis in range(nb_axis):
                         average_potentiometer[axis].append(last_pot[axis])
                         average_encoder[axis].append(last_enc[axis])
                     # log data
