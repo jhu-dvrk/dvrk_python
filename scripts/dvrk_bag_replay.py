@@ -29,10 +29,24 @@
 import crtk
 import sys
 import time
-import rosbag
 import numpy
 import PyKDL
 import argparse
+
+if crtk.ral.ros_version() == 1:
+    import rosbag
+else:
+    import rosbag2_py
+    import rosidl_runtime_py.utilities
+    import rclpy.serialization
+
+import os
+
+def dir_path(path):
+    if os.path.isdir(path):
+        return path
+    else:
+        raise argparse.ArgumentTypeError(f"readable_dir:{path} is not a valid path")
 
 # simplified arm class to replay motion, better performance than
 # dvrk.arm since we're only subscribing to topics we need
@@ -75,8 +89,14 @@ parser.add_argument('-a', '--arm', type = str, required = True,
                     help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
 parser.add_argument('-i', '--interval', type = float, default = 0.01,
                     help = 'expected interval in seconds between messages sent by the device')
-parser.add_argument('-b', '--bag', type = argparse.FileType('r'), required = True,
-                    help = 'ros bag containing the trajectory to replay.  The script assumes the topic to use is /<arm>/setpoint_cp.  You can change the topic used with the -t option')
+
+if crtk.ral.ros_version() == 1:
+    parser.add_argument('-b', '--bag', type = argparse.FileType('r'), required = True,
+                        help = 'ros bag containing the trajectory to replay.  The script assumes the topic to use is /<arm>/setpoint_cp.  You can change the topic used with the -t option')
+else:
+    parser.add_argument('-b', '--bag', type = dir_path, required = True,
+                        help = 'ros bag containing the trajectory to replay.  The script assumes the topic to use is /<arm>/setpoint_cp.  You can change the topic used with the -t option')
+
 parser.add_argument('-m', '--mode', type = str, required = True,
                     choices = ['servo_jp', 'servo_cp'],
                     help = 'topic used to send command to arm, either joint or cartesian positions')
@@ -88,6 +108,7 @@ parser.add_argument('-j', '--jaw', action = 'store_true',
 args = parser.parse_args(argv)
 
 ral = crtk.ral('dvrk_bag_replay')
+ral.spin()
 
 is_cp = (args.mode == 'servo_cp')
 has_jaw = args.jaw

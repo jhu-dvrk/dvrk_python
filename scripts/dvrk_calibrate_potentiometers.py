@@ -59,13 +59,20 @@ class potentiometer_calibration:
         self.expected_interval = expected_interval
         self.ros_namespace = arm_name
         # Create the dVRK python ROS client
+        self.ral = ral
         self.arm = dvrk.arm(ral = ral, arm_name = arm_name, expected_interval = expected_interval)
         self.potentiometers = self.__sensor(ral.create_child(arm_name + '/io/pot'), expected_interval)
         self.encoders = self.__sensor(ral.create_child(arm_name + '/io/actuator'), expected_interval)
-        self.arm.check_connections()
 
 
     def run(self, calibration_type, filename):
+        try:
+            self.ral.check_connections() # making sure the dvrk_console_json is running
+        except TimeoutError as e:
+            print('Error: check_connections failed.  Make sure the dvrk_console_json is started and uses the option -i ros-io-{}.json'.format(self.ros_namespace))
+            print(e)
+            return
+
         nb_joint_positions = 20 # number of positions between limits
         nb_samples_per_position = 250 # number of values collected at each position
         total_samples = nb_joint_positions * nb_samples_per_position
@@ -154,7 +161,10 @@ class potentiometer_calibration:
             average_potentiometer.append([])
             range_of_motion_joint.append(math.fabs(upper_joint_limits[axis] - lower_joint_limits[axis]))
 
-        # Check that everything is working
+        # Check that everything is working, we need this on top of
+        # ral.check_connections because rclpy versions up to humble
+        # don't provide methods to check if a publisher exists for a
+        # given subscriber
         try:
             time.sleep(20.0 * self.expected_interval)
             self.potentiometers.measured_jp()
@@ -217,7 +227,10 @@ class potentiometer_calibration:
                 for sample in range(nb_samples_per_position):
                     last_pot = self.potentiometers.measured_jp()
                     last_enc = self.encoders.measured_jp()
-                    for axis in range(nb_axis):
+                    for axis in range(nb_axis):            request = cisst_msgs.srv.ConvertFloat64Array.Request()
+            request.input = offsets
+            response = a_to_j_service.call(request)
+            offsets = response.output
                         average_potentiometer[axis].append(last_pot[axis])
                         average_encoder[axis].append(last_enc[axis])
                     # log data
@@ -295,10 +308,16 @@ class potentiometer_calibration:
         if calibration_type == 'offsets':
             # convert offsets to joint space
             a_to_j_service = ral.service_client(self.ros_namespace + '/actuator_to_joint_position', cisst_msgs.srv.ConvertFloat64Array)
-            request = cisst_msgs.srv.ConvertFloat64ArrayRequest()
-            request.input = offsets
-            response = a_to_j_service(request)
-            offsets = response.output
+            if crtk.ral.ros_version() == 1:
+                request = cisst_msgs.srv.ConvertFloat64ArrayRequest()
+                request.input = offsets
+                response = a_to_j_service(request)
+                offsets = response.output
+            else:
+                request = cisst_msgs.srv.ConvertFloat64Array.Request()
+                request.input = offsets
+                response = a_to_j_service.call(request)
+                offsets = response.output
 
             newOffsets = []
             print('index | old offset  | new offset | correction')
