@@ -1,6 +1,19 @@
 Change log
 ==========
 
+2.3.0 (2024-08-31)
+==================
+
+* API changes:
+  * New repository based on old dvrk-ros but only includes dvrk_python part.  For previous releases, see archived repository `dvrk-ros` (https://github.com/jhu-dvrk/dvrk-ros).
+  * Supports ROS1 and ROS1
+* Deprecated features:
+  * None
+* New features:
+  * Teleoperation script with logic based on existing C++ implementation
+* Bug fixes:
+  * None
+
 2.2.1 (2023-12-29)
 ==================
 
