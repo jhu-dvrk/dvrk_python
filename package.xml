@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>dvrk_python</name>
-  <version>2.2.1</version>
+  <version>2.3.0</version>
   <description>dVRK Python client</description>
   <maintainer email="anton.deguet@jhu.edu">Anton Deguet</maintainer>
   <maintainer email="amunawar@wpi.edu">Adnan Munawar</maintainer>
