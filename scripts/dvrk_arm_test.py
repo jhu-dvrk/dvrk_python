@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2015-02-22
 
-# (C) Copyright 2015-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2015-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -32,13 +32,12 @@ import PyKDL
 class example_application:
 
     # configuration
-    def __init__(self, ral, arm_name, expected_interval):
+    def __init__(self, ral, arm_name, period = 0.01):
         print('configuring dvrk_arm_test for {}'.format(arm_name))
         self.ral = ral
-        self.expected_interval = expected_interval
+        self.period = period
         self.arm = dvrk.arm(ral = ral,
-                            arm_name = arm_name,
-                            expected_interval = expected_interval)
+                            arm_name = arm_name)
 
     # homing example
     def home(self):
@@ -52,7 +51,11 @@ class example_application:
             sys.exit('failed to home within 10 seconds')
         # get current joints just to set size
         print('move to starting position')
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, t = self.arm.setpoint_jp()
+        if t:
+            goal = numpy.copy(jp)
+        else:
+            print('--------- not valid----')
         # go to zero position, for PSM and ECM make sure 3rd joint is past cannula
         goal.fill(0)
         if ((self.arm.name() == 'PSM1') or (self.arm.name() == 'PSM2')
@@ -70,51 +73,40 @@ class example_application:
 
     # get methods
     def run_get(self):
-        [p, v, e, t] = self.arm.measured_js()
-        d = self.arm.measured_jp()
-        [d, t] = self.arm.measured_jp(extra = True)
-        d = self.arm.measured_jv()
-        [d, t] = self.arm.measured_jv(extra = True)
-        d = self.arm.measured_jf()
-        [d, t] = self.arm.measured_jf(extra = True)
-        d = self.arm.measured_cp()
-        [d, t] = self.arm.measured_cp(extra = True)
-        d = self.arm.local.measured_cp()
-        [d, t] = self.arm.local.measured_cp(extra = True)
-        d = self.arm.measured_cv()
-        [d, t] = self.arm.measured_cv(extra = True)
-        d = self.arm.body.measured_cf()
-        [d, t] = self.arm.body.measured_cf(extra = True)
-        d = self.arm.spatial.measured_cf()
-        [d, t] = self.arm.spatial.measured_cf(extra = True)
+        p, v, e, t = self.arm.measured_js()
+        d, t = self.arm.measured_jp()
+        d, t = self.arm.measured_jv()
+        d, t = self.arm.measured_jf()
+        d, t = self.arm.measured_cp()
+        d, t = self.arm.local.measured_cp()
+        d, t = self.arm.measured_cv()
+        d, t = self.arm.body.measured_cf()
+        d, t = self.arm.spatial.measured_cf()
 
-        [p, v, e, t] = self.arm.setpoint_js()
-        d = self.arm.setpoint_jp()
-        [d, t] = self.arm.setpoint_jp(extra = True)
-        d = self.arm.setpoint_jv()
-        [d, t] = self.arm.setpoint_jv(extra = True)
-        d = self.arm.setpoint_jf()
-        [d, t] = self.arm.setpoint_jf(extra = True)
-        d = self.arm.setpoint_cp()
-        [d, t] = self.arm.setpoint_cp(extra = True)
-        d = self.arm.local.setpoint_cp()
-        [d, t] = self.arm.local.setpoint_cp(extra = True)
+        p, v, e, t = self.arm.setpoint_js()
+        d, t = self.arm.setpoint_jp()
+        d, t  = self.arm.setpoint_jv()
+        d, t  = self.arm.setpoint_jf()
+        d, t = self.arm.setpoint_cp()
+        d, t = self.arm.local.setpoint_cp()
 
     # direct joint control example
     def run_servo_jp(self):
         print('starting servo_jp')
         # get current position
-        initial_joint_position = numpy.copy(self.arm.setpoint_jp())
+        jp, t = self.arm.setpoint_jp()
+        print(jp)
+        initial_joint_position = numpy.copy(jp)
         print('testing direct joint position for 2 joints out of %i' % initial_joint_position.size)
         amplitude = math.radians(5.0) # +/- 5 degrees
         duration = 5  # seconds
-        samples = duration / self.expected_interval
+        samples = duration / self.period
         # create a new goal starting with current position
         goal_p = numpy.copy(initial_joint_position)
         goal_v = numpy.zeros(goal_p.size)
         start = time.time()
 
-        sleep_rate = self.ral.create_rate(1.0 / self.expected_interval)
+        sleep_rate = self.ral.create_rate(1.0 / self.period)
         for i in range(int(samples)):
             angle = i * math.radians(360.0) / samples
             goal_p[0] = initial_joint_position[0] + amplitude * (1.0 - math.cos(angle))
@@ -131,7 +123,8 @@ class example_application:
     def run_move_jp(self):
         print('starting move_jp')
         # get current position
-        initial_joint_position = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        initial_joint_position = numpy.copy(jp)
         print('testing goal joint position for 2 joints out of %i' % initial_joint_position.size)
         amplitude = math.radians(10.0)
         # create a new goal starting with current position
@@ -151,7 +144,8 @@ class example_application:
     # utility to position tool/camera deep enough before cartesian examples
     def prepare_cartesian(self):
         # make sure the camera is past the cannula and tool vertical
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         if ((self.arm.name().endswith('PSM1')) or (self.arm.name().endswith('PSM2'))
             or (self.arm.name().endswith('PSM3')) or (self.arm.name().endswith('ECM'))):
             print('preparing for cartesian motion')
@@ -169,18 +163,19 @@ class example_application:
 
         # create a new goal starting with current position
         initial_cartesian_position = PyKDL.Frame()
-        initial_cartesian_position.p = self.arm.setpoint_cp().p
-        initial_cartesian_position.M = self.arm.setpoint_cp().M
+        cp, _ = self.arm.setpoint_cp()
+        initial_cartesian_position.p = cp.p
+        initial_cartesian_position.M = cp.M
         goal = PyKDL.Frame()
-        goal.p = self.arm.setpoint_cp().p
-        goal.M = self.arm.setpoint_cp().M
+        goal.p = cp.p
+        goal.M = cp.M
         # motion parameters
         amplitude = 0.02 # 4 cm total
         duration = 5  # 5 seconds
-        samples = duration / self.expected_interval
+        samples = duration / self.period
         start = time.time()
 
-        sleep_rate = self.ral.create_rate(1.0 / self.expected_interval)
+        sleep_rate = self.ral.create_rate(1.0 / self.period)
         for i in range(int(samples)):
             goal.p[0] =  initial_cartesian_position.p[0] + amplitude *  (1.0 - math.cos(i * math.radians(360.0) / samples))
             goal.p[1] =  initial_cartesian_position.p[1] + amplitude *  (1.0 - math.cos(i * math.radians(360.0) / samples))
@@ -188,7 +183,7 @@ class example_application:
             # check error on kinematics, compare to desired on arm.
             # to test tracking error we would compare to
             # current_position
-            setpoint_cp = self.arm.setpoint_cp()
+            setpoint_cp, _ = self.arm.setpoint_cp()
             errorX = goal.p[0] - setpoint_cp.p[0]
             errorY = goal.p[1] - setpoint_cp.p[1]
             errorZ = goal.p[2] - setpoint_cp.p[2]
@@ -207,11 +202,12 @@ class example_application:
 
         # create a new goal starting with current position
         initial_cartesian_position = PyKDL.Frame()
-        initial_cartesian_position.p = self.arm.setpoint_cp().p
-        initial_cartesian_position.M = self.arm.setpoint_cp().M
+        cp, _ = self.arm.setpoint_cp()
+        initial_cartesian_position.p = cp.p
+        initial_cartesian_position.M = cp.M
         goal = PyKDL.Frame()
-        goal.p = self.arm.setpoint_cp().p
-        goal.M = self.arm.setpoint_cp().M
+        goal.p = cp.p
+        goal.M = cp.M
 
         # motion parameters
         amplitude = 0.05 # 5 cm
@@ -257,13 +253,13 @@ if __name__ == '__main__':
 
     # parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--arm', type=str, required=True,
+    parser.add_argument('-a', '--arm', type = str, required = True,
                         choices=['ECM', 'MTML', 'MTMR', 'PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                        help = 'expected interval in seconds between messages sent by the device')
+    parser.add_argument('-p', '--period', type =float, default = 0.01,
+                        help = 'period used for loops using servo commands')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_arm_test')
-    application = example_application(ral, args.arm, args.interval)
+    application = example_application(ral, args.arm, args.period)
     ral.spin_and_execute(application.run)
