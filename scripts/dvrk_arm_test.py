@@ -45,17 +45,17 @@ class example_application:
 
         print('starting enable')
         if not self.arm.enable(10):
-            sys.exit('failed to enable within 10 seconds')
+            print('failed to enable within 10 seconds')
+            self.ral.shutdown()
         print('starting home')
         if not self.arm.home(10):
-            sys.exit('failed to home within 10 seconds')
-        # get current joints just to set size
+            print('failed to home within 10 seconds')
+            self.ral.shutdown()
+        # get current joints just to set size, ignore timestamp
         print('move to starting position')
-        jp, t = self.arm.setpoint_jp()
-        if t:
-            goal = numpy.copy(jp)
-        else:
-            print('--------- not valid----')
+        jp, *_ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
+
         # go to zero position, for PSM and ECM make sure 3rd joint is past cannula
         goal.fill(0)
         if ((self.arm.name() == 'PSM1') or (self.arm.name() == 'PSM2')
@@ -95,11 +95,10 @@ class example_application:
         print('starting servo_jp')
         # get current position
         jp, t = self.arm.setpoint_jp()
-        print(jp)
         initial_joint_position = numpy.copy(jp)
         print('testing direct joint position for 2 joints out of %i' % initial_joint_position.size)
         amplitude = math.radians(5.0) # +/- 5 degrees
-        duration = 5  # seconds
+        duration = 10  # seconds
         samples = duration / self.period
         # create a new goal starting with current position
         goal_p = numpy.copy(initial_joint_position)
@@ -109,11 +108,20 @@ class example_application:
         sleep_rate = self.ral.create_rate(1.0 / self.period)
         for i in range(int(samples)):
             angle = i * math.radians(360.0) / samples
+            # position
             goal_p[0] = initial_joint_position[0] + amplitude * (1.0 - math.cos(angle))
             goal_p[1] = initial_joint_position[1] + amplitude *  (1.0 - math.cos(angle))
+            # velocity is easy to compute
             goal_v[0] = amplitude * math.sin(angle)
             goal_v[1] = goal_v[0]
             self.arm.servo_jp(goal_p, goal_v)
+            # get some data just to make sure the server is still
+            # running, this will raise a timeout exception if the dVRK
+            # died.  We also check timestamp to make sure it's valid
+            _, ts = self.arm.measured_jp()
+            if ts == 0:
+                print('received invalid data, maybe the arm is not ready anymore?')
+                self.ral.shutdown()
             sleep_rate.sleep()
 
         actual_duration = time.time() - start
@@ -171,7 +179,7 @@ class example_application:
         goal.M = cp.M
         # motion parameters
         amplitude = 0.02 # 4 cm total
-        duration = 5  # 5 seconds
+        duration = 10  # seconds
         samples = duration / self.period
         start = time.time()
 
@@ -183,7 +191,11 @@ class example_application:
             # check error on kinematics, compare to desired on arm.
             # to test tracking error we would compare to
             # current_position
-            setpoint_cp, _ = self.arm.setpoint_cp()
+            setpoint_cp, ts = self.arm.setpoint_cp()
+            if ts == 0:
+                print('received invalid data, maybe the arm is not ready for cartesian space?')
+                self.ral.shutdown()
+                
             errorX = goal.p[0] - setpoint_cp.p[0]
             errorY = goal.p[1] - setpoint_cp.p[1]
             errorZ = goal.p[2] - setpoint_cp.p[2]
