@@ -20,85 +20,79 @@
 # > rosrun dvrk_python dvrk_arm_test.py -a <arm-name>
 
 import argparse
-import sys
 import time
+import sys
 import crtk
-import dvrk
 import math
 import numpy
 import PyKDL
+
+class device:
+    def __init__(self, ral, arm_name, connection_timeout = 5.0):
+        # populate this class with all the ROS topics we need
+        self.__ral = ral.create_child(arm_name)
+        self.crtk_utils = crtk.utils(self, self.__ral, connection_timeout)
+        self.crtk_utils.add_operating_state()
+        self.crtk_utils.add_setpoint_js()
+        self.crtk_utils.add_measured_js()
+        self.crtk_utils.add_setpoint_cp()
+        self.crtk_utils.add_servo_jp()
+        self.crtk_utils.add_move_jp()
+        self.crtk_utils.add_servo_cp()
+        self.crtk_utils.add_move_cp()
+
+    def ral(self):
+        return self.__ral
 
 # example of application using arm.py
 class example_application:
 
     # configuration
     def __init__(self, ral, arm_name, period = 0.01):
-        print('configuring dvrk_arm_test for {}'.format(arm_name))
+        print('> configuring dvrk_arm_test for {}'.format(arm_name))
         self.ral = ral
+        self.arm_name = arm_name
         self.period = period
-        self.arm = dvrk.arm(ral = ral,
-                            arm_name = arm_name)
+        self.arm = device(ral = ral,
+                          arm_name = arm_name)
+        time.sleep(0.2)
 
     # homing example
     def home(self):
-        self.arm.check_connections()
+        self.ral.check_connections()
 
-        print('starting enable')
+        print('> starting enable')
         if not self.arm.enable(10):
-            print('failed to enable within 10 seconds')
+            print('  ! failed to enable within 10 seconds')
             self.ral.shutdown()
-        print('starting home')
+        print('> starting home')
         if not self.arm.home(10):
-            print('failed to home within 10 seconds')
+            print('  ! failed to home within 10 seconds')
             self.ral.shutdown()
         # get current joints just to set size, ignore timestamp
-        print('move to starting position')
-        jp, *_ = self.arm.setpoint_jp()
-        goal = numpy.copy(jp)
-
-        # go to zero position, for PSM and ECM make sure 3rd joint is past cannula
-        goal.fill(0)
-        if ((self.arm.name() == 'PSM1') or (self.arm.name() == 'PSM2')
-            or (self.arm.name() == 'PSM3') or (self.arm.name() == 'ECM')):
-            goal[2] = 0.12
+        print('> move to starting position')
+        self.prepare_cartesian()
         # move and wait
-        print('moving to starting position')
+        print('> moving to starting position')
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         self.arm.move_jp(goal).wait()
         # try to move again to make sure waiting is working fine, i.e. not blocking
-        print('testing move to current position')
+        print('> testing move to current position')
         move_handle = self.arm.move_jp(goal)
-        print('move handle should return immediately')
+        print('  move handle should return immediately')
         move_handle.wait()
-        print('home complete')
-
-    # get methods
-    def run_get(self):
-        p, v, e, t = self.arm.measured_js()
-        d, t = self.arm.measured_jp()
-        d, t = self.arm.measured_jv()
-        d, t = self.arm.measured_jf()
-        d, t = self.arm.measured_cp()
-        d, t = self.arm.local.measured_cp()
-        d, t = self.arm.measured_cv()
-        d, t = self.arm.body.measured_cf()
-        d, t = self.arm.spatial.measured_cf()
-
-        p, v, e, t = self.arm.setpoint_js()
-        d, t = self.arm.setpoint_jp()
-        d, t  = self.arm.setpoint_jv()
-        d, t  = self.arm.setpoint_jf()
-        d, t = self.arm.setpoint_cp()
-        d, t = self.arm.local.setpoint_cp()
+        print('< home complete')
 
     # direct joint control example
     def run_servo_jp(self):
-        print('starting servo_jp')
+        print('> starting servo_jp')
         # get current position
         jp, t = self.arm.setpoint_jp()
         initial_joint_position = numpy.copy(jp)
-        print('testing direct joint position for 2 joints out of %i' % initial_joint_position.size)
+        print('  testing direct joint position for 2 joints out of %i' % initial_joint_position.size)
         amplitude = math.radians(5.0) # +/- 5 degrees
-        duration = 10  # seconds
+        duration = 5  # seconds
         samples = duration / self.period
         # create a new goal starting with current position
         goal_p = numpy.copy(initial_joint_position)
@@ -106,6 +100,7 @@ class example_application:
         start = time.time()
 
         sleep_rate = self.ral.create_rate(1.0 / self.period)
+        print('  servo_jp expected duration: %2.5f seconds' % (duration))
         for i in range(int(samples)):
             angle = i * math.radians(360.0) / samples
             # position
@@ -120,20 +115,20 @@ class example_application:
             # died.  We also check timestamp to make sure it's valid
             _, ts = self.arm.measured_jp()
             if ts == 0:
-                print('received invalid data, maybe the arm is not ready anymore?')
+                print('  ! received invalid data, maybe the arm is not ready anymore?')
                 self.ral.shutdown()
             sleep_rate.sleep()
 
         actual_duration = time.time() - start
-        print('servo_jp complete in %2.2f seconds (expected %2.2f)' % (actual_duration, duration))
+        print('< servo_jp complete in %2.5f seconds' % (actual_duration))
 
     # goal joint control example
     def run_move_jp(self):
-        print('starting move_jp')
+        print('> starting move_jp')
         # get current position
         jp, _ = self.arm.setpoint_jp()
         initial_joint_position = numpy.copy(jp)
-        print('testing goal joint position for 2 joints out of %i' % initial_joint_position.size)
+        print('  testing goal joint position for 2 joints out of %i' % initial_joint_position.size)
         amplitude = math.radians(10.0)
         # create a new goal starting with current position
         goal = numpy.copy(initial_joint_position)
@@ -147,26 +142,27 @@ class example_application:
         self.arm.move_jp(goal).wait()
         # back to initial position
         self.arm.move_jp(initial_joint_position).wait()
-        print('move_jp complete')
+        print('< move_jp complete')
 
     # utility to position tool/camera deep enough before cartesian examples
     def prepare_cartesian(self):
         # make sure the camera is past the cannula and tool vertical
-        jp, _ = self.arm.setpoint_jp()
+        jp, ts = self.arm.setpoint_jp()
         goal = numpy.copy(jp)
-        if ((self.arm.name().endswith('PSM1')) or (self.arm.name().endswith('PSM2'))
-            or (self.arm.name().endswith('PSM3')) or (self.arm.name().endswith('ECM'))):
-            print('preparing for cartesian motion')
+        if ((self.arm_name.endswith('PSM1')) or (self.arm_name.endswith('PSM2'))
+            or (self.arm_name.endswith('PSM3')) or (self.arm_name.endswith('ECM'))):
+            print('  > preparing for cartesian motion')
             # set in position joint mode
             goal[0] = 0.0
             goal[1] = 0.0
             goal[2] = 0.12
             goal[3] = 0.0
             self.arm.move_jp(goal).wait()
+            print('  < ready for cartesian mode')
 
     # direct cartesian control example
     def run_servo_cp(self):
-        print('starting servo_cp')
+        print('> starting servo_cp')
         self.prepare_cartesian()
 
         # create a new goal starting with current position
@@ -179,11 +175,12 @@ class example_application:
         goal.M = cp.M
         # motion parameters
         amplitude = 0.02 # 4 cm total
-        duration = 10  # seconds
+        duration = 5  # seconds
         samples = duration / self.period
         start = time.time()
 
         sleep_rate = self.ral.create_rate(1.0 / self.period)
+        print('  servo_cp expected duration: %2.5f seconds' % (duration))
         for i in range(int(samples)):
             goal.p[0] =  initial_cartesian_position.p[0] + amplitude *  (1.0 - math.cos(i * math.radians(360.0) / samples))
             goal.p[1] =  initial_cartesian_position.p[1] + amplitude *  (1.0 - math.cos(i * math.radians(360.0) / samples))
@@ -193,23 +190,23 @@ class example_application:
             # current_position
             setpoint_cp, ts = self.arm.setpoint_cp()
             if ts == 0:
-                print('received invalid data, maybe the arm is not ready for cartesian space?')
+                print('  ! received invalid data, maybe the arm is not ready for cartesian space.  Is there an instrument configured?')
                 self.ral.shutdown()
-                
+
             errorX = goal.p[0] - setpoint_cp.p[0]
             errorY = goal.p[1] - setpoint_cp.p[1]
             errorZ = goal.p[2] - setpoint_cp.p[2]
             error = math.sqrt(errorX * errorX + errorY * errorY + errorZ * errorZ)
             if error > 0.002: # 2 mm
-                print('Inverse kinematic error in position [%i]: %s (might be due to latency)' % (i, error))
+                print('  Inverse kinematic error in position [%i]: %s (might be due to latency)' % (i, error))
             sleep_rate.sleep()
 
         actual_duration = time.time() - start
-        print('servo_cp complete in %2.2f seconds (expected %2.2f)' % (actual_duration, duration))
+        print('< servo_cp complete in %2.5f seconds' % (actual_duration))
 
     # direct cartesian control example
     def run_move_cp(self):
-        print('starting move_cp')
+        print('> starting move_cp')
         self.prepare_cartesian()
 
         # create a new goal starting with current position
@@ -248,16 +245,19 @@ class example_application:
         goal.p[0] =  initial_cartesian_position.p[0]
         goal.p[1] =  initial_cartesian_position.p[1]
         self.arm.move_cp(goal).wait()
-        print('move_cp complete')
+        print('< move_cp complete')
 
     # main method
     def run(self):
         self.home()
-        self.run_get()
         self.run_servo_jp()
         self.run_move_jp()
         self.run_servo_cp()
         self.run_move_cp()
+
+
+def on_shutdown():
+    print ('>> user defined shutdown callback')
 
 if __name__ == '__main__':
     # extract ros arguments (e.g. __ns:= for namespace)
@@ -273,5 +273,9 @@ if __name__ == '__main__':
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_arm_test')
+    ral.on_shutdown(on_shutdown)
     application = example_application(ral, args.arm, args.period)
-    ral.spin_and_execute(application.run)
+    try:
+        ral.spin_and_execute(application.run)
+    except:
+        print('--- got except ---')
