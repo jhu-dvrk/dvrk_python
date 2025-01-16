@@ -87,7 +87,6 @@ class dvrk_teleoperation:
         self.operator_roll_threshold = 3 * math.pi / 180
         self.operator_is_active = False
         self.tolerance_back_from_clutch = 2 * math.pi / 180
-        self.master_use_measured_cv = False
 
         self.master_measured_cp = PyKDL.Frame()
         self.master_move_cp = PyKDL.Frame()
@@ -116,16 +115,8 @@ class dvrk_teleoperation:
                 print(f'{self.ral.node_name()}: optional functions \"jaw/servo_jp\" and \"jaw/setpoint_js\" are not connected, setting \"ignore-jaw\" to true')
                 self.jaw_ignore = True
 
-        # check if MTM has measured_cv as needed
-        if self.master_use_measured_cv and not callable(getattr(self.master, "measured_cv", None)):
-            self.master_use_measured_cv = False
-            print(f'{self.ral.node_name()}: master ({self.master.name()} doesn\'t provide measured_cv, you can avoid this warning by setting \"use-mtm-velocity\" to false)')
-
-
     def run_all_states(self):
         self.master_measured_cp = self.master.measured_cp()
-        if self.master_use_measured_cv:
-            self.master_measured_cv = self.master.measured_cv()
         self.master_setpoint_cp = self.master.setpoint_cp()
         self.puppet_setpoint_cp = self.puppet.setpoint_cp()
 
@@ -407,6 +398,8 @@ class dvrk_teleoperation:
         self.gripper_to_jaw_offset = -self.gripper_zero / self.gripper_to_jaw_scale
 
     def set_current_state(self, state):
+        self.current_state = state
+
         if state == self.state.DISABLED:
             print('Moving into state \"DISABLED\"')
         elif state == self.state.SETTING_ARMS_STATE:
@@ -420,7 +413,6 @@ class dvrk_teleoperation:
             self.enter_enabled()
         else:
             raise RuntimeError('Invalid state')
-        self.current_state = state
 
     def set_desired_state(self, state):
         self.desired_state = state
@@ -470,7 +462,6 @@ class mtm_teleop(object):
 
         self.__crtk_utils.add_operating_state()
         self.__crtk_utils.add_measured_cp()
-        # self.__crtk_utils.add_measured_cv()
         self.__crtk_utils.add_setpoint_cp()
         self.__crtk_utils.add_move_cp()
 
