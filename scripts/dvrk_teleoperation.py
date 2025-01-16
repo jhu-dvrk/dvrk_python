@@ -1,3 +1,21 @@
+#!/usr/bin/env python
+
+# Author: Junxiang Wang
+# Date: 2024-04-12
+
+# (C) Copyright 2024-2025 Johns Hopkins University (JHU), All Rights Reserved.
+
+# --- begin cisst license - do not edit ---
+
+# This software is provided "as is" under an open source license, with
+# no warranty.  The complete license can be found in license.txt and
+# http://www.cisst.org/cisst/license.txt.
+
+# --- end cisst license ---
+
+# Start teleoperation for (e.g.) MTML/PSM1 via:
+# > rosrun dvrk_python dvrk_teleoperation -m MTML -p PSM1
+
 import argparse
 import crtk
 import crtk_msgs.msg
@@ -8,7 +26,6 @@ import math
 import numpy
 import os
 import PyKDL
-import rospy
 import std_msgs.msg
 import sys
 import time
@@ -19,7 +36,7 @@ class dvrk_teleoperation:
         SETTING_ARMS_STATE = 2
         ALIGNING_ARM = 3
         ENABLED = 4
-    
+
     class clutch_button(crtk.joystick_button):
         def __init__(self, ral, clutch_topic, teleop_class):
             super().__init__(ral, clutch_topic)
@@ -37,7 +54,7 @@ class dvrk_teleoperation:
             super().__init__(ral, operator_present_topic)
             self.set_callback(self.operator_present_cb)
             self.teleop_class = teleop_class
-        
+
         def operator_present_cb(self, value):
             if value != None:
                 self.teleop_class.operator_is_present = value
@@ -325,7 +342,6 @@ class dvrk_teleoperation:
     def transition_setting_arms_state(self):
         if self.puppet.is_enabled() and self.puppet.is_homed() and self.master.is_enabled() and self.master.is_homed():
             if self.from_disabled and self.align_master:
-                input('Press [enter] after master arm has been homed to start aligning')
                 self.from_disabled = False
             self.set_current_state(self.state.ALIGNING_ARM)
             self.entering_state = True
@@ -363,7 +379,7 @@ class dvrk_teleoperation:
     def transition_aligning_arm(self):
         if self.desired_state == self.current_state:
             return
-        
+
         desired_orientation = self.update_align_offset()
         orientation_error = 0
         # set error only if we need to align MTM to PSM
@@ -445,12 +461,14 @@ class dvrk_teleoperation:
                 self.set_desired_state(self.state.DISABLED)
             current_jaw = self.puppet_jaw_setpoint_js[0][0]
             self.gripper_ghost = self.jaw_to_gripper(current_jaw)
-        
+
         # set MTM/PSM to Teleop (Cartesian Position Mode)
         self.master.use_gravity_compensation(True)
+
         # set forces to zero and lock/unlock orientation as needed
-        wrench = [0,0,0,0,0,0]
+        wrench = [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
         self.master.body.servo_cf(wrench)
+
         # reset user wrench
         self.following_master_body_servo_cf = wrench
 
@@ -465,7 +483,7 @@ class dvrk_teleoperation:
             self.clutch(True)
         else:
             self.set_following(True)
-        
+         
     def transition_enabled(self):
         if self.desired_state != self.current_state:
             self.set_following(False)
@@ -647,7 +665,7 @@ class dvrk_teleoperation:
         self.operator_is_active = False
 
     def run(self):
-        while not rospy.is_shutdown() and self.running:
+        while not self.ral.is_shutdown() and self.running:
             try:
                 if self.current_state == self.state.DISABLED:
                     self.transition_disabled()
