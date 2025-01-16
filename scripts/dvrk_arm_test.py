@@ -255,9 +255,8 @@ class example_application:
         self.run_servo_cp()
         self.run_move_cp()
 
-
 def on_shutdown():
-    print ('>> user defined shutdown callback')
+    print ('>> illustrating user defined shutdown callback')
 
 if __name__ == '__main__':
     # extract ros arguments (e.g. __ns:= for namespace)
@@ -275,7 +274,4 @@ if __name__ == '__main__':
     ral = crtk.ral('dvrk_arm_test')
     ral.on_shutdown(on_shutdown)
     application = example_application(ral, args.arm, args.period)
-    try:
-        ral.spin_and_execute(application.run)
-    except:
-        print('--- got except ---')
+    ral.spin_and_execute(application.run)
