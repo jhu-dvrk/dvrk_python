@@ -32,38 +32,38 @@ if sys.version_info.major < 3:
 
 # example of application using arm.py
 class example_application:
-    def __init__(self, ral, arm_name, expected_interval):
-        print('configuring dvrk_psm_test for {}'.format(arm_name))
-
+    def __init__(self, ral, arm_name, period):
+        print('> configuring dvrk_psm_test for {}'.format(arm_name))
         self.ral = ral
-        self.expected_interval = expected_interval
+        self.period = period
         self.arm = dvrk.psm(ral = ral,
-                            arm_name = arm_name,
-                            expected_interval = expected_interval)
+                            arm_name = arm_name)
 
     # homing example
     def home(self):
         self.ral.check_connections()
 
-        print('starting enable')
+        print('> starting enable')
         if not self.arm.enable(10):
-            sys.exit('failed to enable within 10 seconds')
-        print('starting home')
+            sys.exit('  ! failed to enable within 10 seconds')
+        print('> starting home')
         if not self.arm.home(10):
-            sys.exit('failed to home within 10 seconds')
+            sys.exit('  ! failed to home within 10 seconds')
 
-        # get current joints just to set size
-        print('move to starting position')
-        goal = numpy.copy(self.arm.setpoint_jp())
         # go to zero position, make sure 3rd joint is past cannula
+        print('> move to starting position')
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         goal.fill(0)
         goal[2] = 0.12
+
         self.arm.move_jp(goal).wait()
 
     # utility to position tool/camera deep enough before cartesian examples
     def prepare_cartesian(self):
         # make sure the tip is past the cannula and tool vertical
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         if ((self.arm.name().endswith('PSM1')) or (self.arm.name().endswith('PSM2'))
             or (self.arm.name().endswith('PSM3'))):
             print('preparing for cartesian motion')
@@ -111,11 +111,12 @@ class example_application:
         self.prepare_cartesian()
 
         initial_cartesian_position = PyKDL.Frame()
-        initial_cartesian_position.p = self.arm.setpoint_cp().p
-        initial_cartesian_position.M = self.arm.setpoint_cp().M
+        setpoint_cp, _ = self.arm.setpoint_cp()
+        initial_cartesian_position.p = setpoint_cp.p
+        initial_cartesian_position.M = setpoint_cp.M
         goal = PyKDL.Frame()
-        goal.p = self.arm.setpoint_cp().p
-        goal.M = self.arm.setpoint_cp().M
+        goal.p = setpoint_cp.p
+        goal.M = setpoint_cp.M
 
         # motion parameters
         amplitude = 0.05 # 5 cm
@@ -152,9 +153,9 @@ class example_application:
         # assume we start at 50, and then move +/- 30
         amplitude = math.radians(30.0)
         duration = 5  # seconds
-        samples = int(duration / self.expected_interval)
+        samples = int(duration / self.period)
 
-        sleep_rate = self.ral.create_rate(1.0 / self.expected_interval)
+        sleep_rate = self.ral.create_rate(1.0 / self.period)
         # create a new goal starting with current position
         for i in range(samples * 4):
             sine = math.sin(2 * math.pi * float(i) / samples)
@@ -179,10 +180,10 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                        help = 'expected interval in seconds between messages sent by the device')
+    parser.add_argument('-p', '--period', type =float, default = 0.01,
+                        help = 'period used for loops using servo commands')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_psm_test')
-    application = example_application(ral, args.arm, args.interval)
+    application = example_application(ral, args.arm, args.period)
     ral.spin_and_execute(application.run)

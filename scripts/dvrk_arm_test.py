@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2015-02-22
 
-# (C) Copyright 2015-2024 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2015-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -255,8 +255,8 @@ class example_application:
         self.run_servo_cp()
         self.run_move_cp()
 
-def on_shutdown():
-    print ('>> illustrating user defined shutdown callback')
+    def on_shutdown(self):
+        print ('>> illustrating user defined shutdown callback')
 
 if __name__ == '__main__':
     # extract ros arguments (e.g. __ns:= for namespace)
@@ -272,6 +272,6 @@ if __name__ == '__main__':
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_arm_test')
-    ral.on_shutdown(on_shutdown)
     application = example_application(ral, args.arm, args.period)
+    ral.on_shutdown(application.on_shutdown)
     ral.spin_and_execute(application.run)

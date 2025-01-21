@@ -2,7 +2,7 @@
 
 # Authors: Nick Eusman, Anton Deguet
 # Date: 2015-09-24
-# Copyright JHU 2015-2023
+# Copyright JHU 2015-2025
 
 import time
 import math
@@ -49,20 +49,19 @@ class potentiometer_calibration:
 
     # class to contain measured_js
     class __sensor:
-        def __init__(self, ral, expected_interval):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral):
+            self.__crtk_utils = crtk.utils(self, ral)
             self.__crtk_utils.add_measured_js()
 
 
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name):
         self.serial_number = ""
-        self.expected_interval = expected_interval
         self.ros_namespace = arm_name
         # Create the dVRK python ROS client
         self.ral = ral
-        self.arm = dvrk.arm(ral = ral, arm_name = arm_name, expected_interval = expected_interval)
-        self.potentiometers = self.__sensor(ral.create_child(arm_name + '/io/pot'), expected_interval)
-        self.encoders = self.__sensor(ral.create_child(arm_name + '/io/actuator'), expected_interval)
+        self.arm = dvrk.arm(ral = ral, arm_name = arm_name)
+        self.potentiometers = self.__sensor(ral.create_child(arm_name + '/io/pot'))
+        self.encoders = self.__sensor(ral.create_child(arm_name + '/io/actuator'))
 
 
     def run(self, calibration_type, filename):
@@ -79,7 +78,7 @@ class potentiometer_calibration:
         samples_so_far = 0
 
         sleep_time_after_motion = 0.5 # time after motion from position to position to allow potentiometers to stabilize
-        sleep_time_between_samples = self.expected_interval * 2.0 # time between two samples read (potentiometers)
+        sleep_time_between_samples = 0.01 # time between two samples read (potentiometers), assuming dvrk_console is started with default 100Hz
 
         encoders = []
         potentiometers = []
@@ -166,7 +165,7 @@ class potentiometer_calibration:
         # don't provide methods to check if a publisher exists for a
         # given subscriber
         try:
-            time.sleep(20.0 * self.expected_interval)
+            time.sleep(0.2)
             self.potentiometers.measured_jp()
         except:
             print('It seems the console for {} is not started or is not publishing the IO topics'.format(self.ros_namespace))
@@ -225,8 +224,8 @@ class potentiometer_calibration:
 
                 # collect nb_samples_per_position at current position to compute average
                 for sample in range(nb_samples_per_position):
-                    last_pot = self.potentiometers.measured_jp()
-                    last_enc = self.encoders.measured_jp()
+                    last_pot, _ = self.potentiometers.measured_jp()
+                    last_enc, _ = self.encoders.measured_jp()
                     for axis in range(nb_axis):
                         average_potentiometer[axis].append(last_pot[axis])
                         average_encoder[axis].append(last_enc[axis])
@@ -275,7 +274,7 @@ class potentiometer_calibration:
             input('Press [enter] to continue\n')
             nb_samples = 2 * nb_samples_per_position
             for sample in range(nb_samples):
-                last_pot = self.potentiometers.measured_jp()
+                last_pot, _ = self.potentiometers.measured_jp()
                 for axis in range(nb_axis):
                     average_offsets[axis].append(last_pot[axis] * r2d)
                 writer.writerow(last_pot)
