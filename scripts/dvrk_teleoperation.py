@@ -18,12 +18,12 @@
 
 import argparse
 import crtk
-import dvrk
 from enum import Enum
-import json
+import geometry_msgs.msg
 import math
 import numpy
 import PyKDL
+import std_msgs.msg
 import sys
 import time
 
@@ -34,7 +34,7 @@ class teleoperation:
         FOLLOWING = 3
 
     def __init__(self, ral, master, puppet, clutch_topic, expected_interval, align_mtm, operator_present_topic = ""):
-        print('Initialzing dvrk_teleoperation for {} and {}'.format(master.name(), puppet.name()))
+        print('Initialzing dvrk_teleoperation for {} and {}'.format(master.name, puppet.name))
         self.ral = ral
         self.expected_interval = expected_interval
 
@@ -107,10 +107,10 @@ class teleoperation:
 
     def check_arm_state(self):
         if not self.puppet.is_homed():
-            print(f'ERROR: {self.ral.node_name()}: puppet ({self.puppet.name()}) is not homed anymore')
+            print(f'ERROR: {self.ral.node_name()}: puppet ({self.puppet.name}) is not homed anymore')
             self.running = False
         if not self.master.is_homed():
-            print(f'ERROR: {self.ral.node_name()}: master ({self.master.name()}) is not homed anymore')
+            print(f'ERROR: {self.ral.node_name()}: master ({self.master.name}) is not homed anymore')
             self.running = False
 
     def enter_aligning(self):
@@ -173,9 +173,9 @@ class teleoperation:
         if self.operator_is_present and now - self.last_operator_prompt > 4.0:
             self.last_operator_prompt = now
             if not aligned:
-                print(f'Unable to align master ({self.master.name()}), angle error is {orientation_error * 180 / math.pi} (deg)')
+                print(f'Unable to align master ({self.master.name}), angle error is {orientation_error * 180 / math.pi} (deg)')
             elif not self.operator_is_active:
-                print(f'To begin teleop, pinch/twist master ({self.master.name()}) gripper a bit')
+                print(f'To begin teleop, pinch/twist master ({self.master.name}) gripper a bit')
 
     def enter_clutched(self):
         self.current_state = teleoperation.State.CLUTCHED
@@ -202,7 +202,7 @@ class teleoperation:
         # set up gripper ghost to rate-limit jaw speed
         jaw_setpoint = self.puppet.jaw.setpoint_js()[0]
         if len(jaw_setpoint) != 1:
-            print(f'{self.ral.node_name()}: unable to get jaw position. Make sure there is an instrument on the puppet ({self.puppet.name()})')
+            print(f'{self.ral.node_name()}: unable to get jaw position. Make sure there is an instrument on the puppet ({self.puppet.name})')
             self.running = False
         self.gripper_ghost = self.jaw_to_gripper(jaw_setpoint[0])
 
@@ -251,11 +251,11 @@ class teleoperation:
         print("Homing arms...")
         timeout = 10.0 # seconds
         if not self.puppet.enable(timeout) or not self.puppet.home(timeout):
-            print('    ! failed to home {} within {} seconds'.format(self.puppet.name(), timeout))
+            print('    ! failed to home {} within {} seconds'.format(self.puppet.name, timeout))
             return False
 
         if not self.master.enable(timeout) or not self.master.home(timeout):
-            print('    ! failed to home {} within {} seconds'.format(self.master.name(), timeout))
+            print('    ! failed to home {} within {} seconds'.format(self.master.name, timeout))
             return False
 
         print("    Homing is complete")
@@ -299,6 +299,73 @@ class teleoperation:
 
             teleop_rate.sleep()
 
+class MTM:
+    class ServoCF:
+        def __init__(self, ral, expected_interval):
+            self.utils = crtk.utils(self, ral, expected_interval)
+            self.utils.add_servo_cf()
+
+    class Gripper:
+        def __init__(self, ral, expected_interval):
+            self.utils = crtk.utils(self, ral, expected_interval)
+            self.utils.add_measured_js()
+
+    def __init__(self, ral, arm_name, expected_interval = 0.01):
+        self.name = arm_name
+        self.ral = ral.create_child(arm_name)
+        self.utils = crtk.utils(self, self.ral, expected_interval)
+
+        self.utils.add_operating_state()
+        self.utils.add_measured_cp()
+        self.utils.add_setpoint_cp()
+        self.utils.add_move_cp()
+
+        self.gripper = self.Gripper(self.ral.create_child('gripper'), expected_interval)
+        self.body = self.ServoCF(self.ral.create_child('body'), expected_interval)
+
+        # non-CRTK topics
+        self.lock_orientation_pub = self.ral.publisher('lock_orientation',
+                                                        geometry_msgs.msg.Quaternion,
+                                                        latch = True, queue_size = 1)
+        self.unlock_orientation_pub = self.ral.publisher('unlock_orientation',
+                                                         std_msgs.msg.Empty,
+                                                         latch = True, queue_size = 1)
+        self.use_gravity_compensation_pub = self.ral.publisher('use_gravity_compensation',
+                                                                std_msgs.msg.Bool,
+                                                                latch = True, queue_size = 1)
+
+    def lock_orientation(self, orientation):
+        """orientation should be a PyKDL.Rotation object"""
+        q = geometry_msgs.msg.Quaternion()
+        q.x, q.y, q.z, q.w = orientation.GetQuaternion()
+        self.lock_orientation_pub.publish(q)
+
+    def unlock_orientation(self):
+        self.unlock_orientation_pub.publish(std_msgs.msg.Empty())
+
+    def use_gravity_compensation(self, gravity_compensation):
+        """Turn on/off gravity compensation (only applies to Cartesian effort mode)"""
+        msg = std_msgs.msg.Bool(data=gravity_compensation)
+        self.use_gravity_compensation_pub.publish(msg)
+
+class PSM:
+    class Jaw:
+        def __init__(self, ral, expected_interval):
+            self.utils = crtk.utils(self, ral, expected_interval)
+            self.utils.add_setpoint_js()
+            self.utils.add_servo_jp()
+
+    def __init__(self, ral, arm_name, expected_interval = 0.01):
+        self.name = arm_name
+        self.ral = ral.create_child(arm_name)
+        self.utils = crtk.utils(self, self.ral, expected_interval)
+
+        self.utils.add_operating_state()
+        self.utils.add_setpoint_cp()
+        self.utils.add_servo_cp()
+        self.utils.add_hold()
+
+        self.jaw = self.Jaw(self.ral.create_child('jaw'), expected_interval)
 
 if __name__ == '__main__':
     # extract ros arguments (e.g. __ns:= for namespace)
@@ -324,8 +391,8 @@ if __name__ == '__main__':
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_python_teleoperation')
-    mtm = dvrk.mtm(ral, args.mtm, args.interval*2)
-    psm = dvrk.psm(ral, args.psm, args.interval*2)
+    mtm = MTM(ral, args.mtm, args.interval*2)
+    psm = PSM(ral, args.psm, args.interval*2)
     application = teleoperation(ral, mtm, psm, args.clutch, args.interval,
                                 not args.no_mtm_alignment, operator_present_topic=args.operator)
     ral.spin_and_execute(application.run)
