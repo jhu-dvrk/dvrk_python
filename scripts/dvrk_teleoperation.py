@@ -33,7 +33,7 @@ class teleoperation:
         CLUTCHED = 2
         FOLLOWING = 3
 
-    def __init__(self, ral, master, puppet, clutch_topic, expected_interval, operator_present_topic = ""):
+    def __init__(self, ral, master, puppet, clutch_topic, expected_interval, align_mtm, operator_present_topic = ""):
         print('Initialzing dvrk_teleoperation for {} and {}'.format(master.name(), puppet.name()))
         self.ral = ral
         self.expected_interval = expected_interval
@@ -49,7 +49,14 @@ class teleoperation:
         self.jaw_max = 80 * math.pi / 180
         self.jaw_rate = 2 * math.pi
 
-        self.operator_orientation_tolerance = 5 * math.pi / 180
+        self.can_align_mtm = align_mtm
+
+        # slowly eliminate alignment offset if we can align mtm,
+        # otherwise maintain fixed initial alignment offset
+        self.align_rate = 0.25 * math.pi if self.can_align_mtm else 0.0
+
+        # don't require alignment before beginning teleop if mtm wrist can't be actuated
+        self.operator_orientation_tolerance = 5 * math.pi / 180 if self.can_align_mtm else math.pi
         self.operator_gripper_threshold = 5 * math.pi / 180
         self.operator_roll_threshold = 3 * math.pi / 180
 
@@ -57,7 +64,7 @@ class teleoperation:
         self.gripper_to_jaw_offset = -self.gripper_zero * self.gripper_to_jaw_scale
 
         self.operator_is_active = False
-        if operator_present_topic != "":
+        if operator_present_topic:
             self.operator_is_present = False
             self.operator_button = crtk.joystick_button(ral, operator_present_topic)
             self.operator_button.set_callback(self.on_operator_present)
@@ -68,21 +75,26 @@ class teleoperation:
         self.clutch_button = crtk.joystick_button(ral, clutch_topic)
         self.clutch_button.set_callback(self.on_clutch)
 
+    # callback for operator pedal/button
     def on_operator_present(self, present):
         self.operator_is_present = present
         if not present:
             self.operator_is_active = False
 
+    # callback for clutch pedal/button
     def on_clutch(self, clutch_pressed):
         self.clutch_pressed = clutch_pressed
 
+    # compute relative orientation of mtm and psm
     def alignment_offset(self):
         return self.master.measured_cp().M.Inverse() * self.puppet.setpoint_cp().M
 
+    # set relative origins for clutching and alignment offset
     def update_initial_state(self):
         self.master_cartesian_initial = self.master.measured_cp()
         self.puppet_cartesian_initial = self.puppet.setpoint_cp()
         self.alignment_offset_initial = self.alignment_offset()
+        self.offset_angle, self.offset_axis = self.alignment_offset_initial.GetRotAngle()
 
     def gripper_to_jaw(self, gripper_angle):
         jaw_angle = self.gripper_to_jaw_scale * gripper_angle + self.gripper_to_jaw_offset
@@ -109,6 +121,7 @@ class teleoperation:
         self.master.use_gravity_compensation(True)
         self.puppet.hold()
 
+        # reset operator activity data in case operator is inactive
         self.operator_roll_min = math.pi * 100
         self.operator_roll_max = -math.pi * 100
         self.operator_gripper_min = math.pi * 100
@@ -127,7 +140,7 @@ class teleoperation:
     def run_aligning(self):
         orientation_error, _ = self.alignment_offset().GetRotAngle()
 
-        # if operator is inactive, use gripper or roll to detect when the user is ready
+        # if operator is inactive, use gripper or roll activity to detect when the user is ready
         if self.operator_is_present:
             gripper = self.master.gripper.measured_js()[0][0]
             self.operator_gripper_max = max(gripper, self.operator_gripper_max)
@@ -136,6 +149,7 @@ class teleoperation:
             if gripper_range >= self.operator_gripper_threshold:
                 self.operator_is_active = True
 
+            # determine amount of roll around z axis by rotation of y-axis
             master_rotation, puppet_rotation = self.master.measured_cp().M, self.puppet.setpoint_cp().M
             master_y_axis = PyKDL.Vector(master_rotation[0,1], master_rotation[1,1], master_rotation[2,1])
             puppet_y_axis = PyKDL.Vector(puppet_rotation[0,1], puppet_rotation[1,1], puppet_rotation[2,1])
@@ -213,8 +227,12 @@ class teleoperation:
         puppet_translation = master_translation * self.scale
         puppet_translation = puppet_translation + self.puppet_cartesian_initial.p
 
-        # rotation
-        puppet_rotation = master_position.M * self.alignment_offset_initial
+        # set rotation of psm to match mtm plus alignment offset
+        # if we can actuate the MTM, we slowly reduce the alignment offset to zero over time
+        max_delta = self.align_rate * self.expected_interval
+        self.offset_angle += math.copysign(min(abs(self.offset_angle), max_delta), -self.offset_angle)
+        alignment_offset = PyKDL.Rotation.Rot(self.offset_axis, self.offset_angle)
+        puppet_rotation = master_position.M * alignment_offset
 
         puppet_cartesian_goal = PyKDL.Frame(puppet_rotation, puppet_translation)
         self.puppet.servo_cp(puppet_cartesian_goal)
@@ -297,8 +315,10 @@ if __name__ == '__main__':
                         help = 'PSM arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
     parser.add_argument('-c', '--clutch', type = str, default='/footpedals/clutch',
                         help = 'ROS topic corresponding to clutch button/pedal input')
-    parser.add_argument('-o', '--operator', type = str, default='/footpedals/coag',
+    parser.add_argument('-o', '--operator', type = str, default='/footpedals/coag', const=None, nargs='?',
                         help = 'ROS topic corresponding to operator present button/pedal/sensor input')
+    parser.add_argument('-n', '--no-mtm-alignment', action='store_true',
+                        help="don't align mtm (useful for using haptic devices as MTM which don't have wrist actuation)")
     parser.add_argument('-i', '--interval', type=float, default=0.005,
                         help = 'expected interval in seconds between messages sent by the device')
     args = parser.parse_args(argv)
@@ -306,5 +326,6 @@ if __name__ == '__main__':
     ral = crtk.ral('dvrk_python_teleoperation')
     mtm = dvrk.mtm(ral, args.mtm, args.interval*2)
     psm = dvrk.psm(ral, args.psm, args.interval*2)
-    application = teleoperation(ral, mtm, psm, args.clutch, args.interval, operator_present_topic=args.operator)
+    application = teleoperation(ral, mtm, psm, args.clutch, args.interval,
+                                not args.no_mtm_alignment, operator_present_topic=args.operator)
     ral.spin_and_execute(application.run)
