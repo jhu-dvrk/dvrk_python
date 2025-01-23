@@ -13,8 +13,15 @@
 
 # --- end cisst license ---
 
-# Start teleoperation for (e.g.) MTML/PSM1 via:
+### Instructions:
+# First start a console:
+# > ros2 run dvrk_robot dvrk_console_json -j jhu-dVRK/console-MTML-PSM2-Teleop.json
+# or to use a Falon/ForceDimension haptic device as the MTM:
+# > ros2 run dvrk_robot dvrk_console_json -j jhu-dVRK/console-Falcon-PSM2-TeleopDerived.json -C -p 0.001
+
+# Next, start the teleoperation script for (e.g.) MTML/PSM1 via:
 # > rosrun dvrk_python dvrk_teleoperation -m MTML -p PSM1
+# If using a haptic device with unactuated wrist, make sure to add the -n flag
 
 import argparse
 import crtk
@@ -33,10 +40,10 @@ class teleoperation:
         CLUTCHED = 2
         FOLLOWING = 3
 
-    def __init__(self, ral, master, puppet, clutch_topic, expected_interval, align_mtm, operator_present_topic = ""):
+    def __init__(self, ral, master, puppet, clutch_topic, run_period, align_mtm, operator_present_topic = ""):
         print('Initialzing dvrk_teleoperation for {} and {}'.format(master.name, puppet.name))
         self.ral = ral
-        self.expected_interval = expected_interval
+        self.run_period = run_period
 
         self.master = master
         self.puppet = puppet
@@ -87,12 +94,12 @@ class teleoperation:
 
     # compute relative orientation of mtm and psm
     def alignment_offset(self):
-        return self.master.measured_cp().M.Inverse() * self.puppet.setpoint_cp().M
+        return self.master.measured_cp()[0].M.Inverse() * self.puppet.setpoint_cp()[0].M
 
     # set relative origins for clutching and alignment offset
     def update_initial_state(self):
-        self.master_cartesian_initial = self.master.measured_cp()
-        self.puppet_cartesian_initial = self.puppet.setpoint_cp()
+        self.master_cartesian_initial = self.master.measured_cp()[0]
+        self.puppet_cartesian_initial = self.puppet.setpoint_cp()[0]
         self.alignment_offset_initial = self.alignment_offset()
         self.offset_angle, self.offset_axis = self.alignment_offset_initial.GetRotAngle()
 
@@ -150,7 +157,7 @@ class teleoperation:
                 self.operator_is_active = True
 
             # determine amount of roll around z axis by rotation of y-axis
-            master_rotation, puppet_rotation = self.master.measured_cp().M, self.puppet.setpoint_cp().M
+            master_rotation, puppet_rotation = self.master.measured_cp()[0].M, self.puppet.setpoint_cp()[0].M
             master_y_axis = PyKDL.Vector(master_rotation[0,1], master_rotation[1,1], master_rotation[2,1])
             puppet_y_axis = PyKDL.Vector(puppet_rotation[0,1], puppet_rotation[1,1], puppet_rotation[2,1])
             roll = math.acos(PyKDL.dot(puppet_y_axis, master_y_axis))
@@ -165,7 +172,7 @@ class teleoperation:
         aligned = orientation_error <= self.operator_orientation_tolerance
         now = time.perf_counter()
         if not self.last_align or now - self.last_align > 4.0:
-            move_cp = PyKDL.Frame(self.puppet.setpoint_cp().M, self.master.setpoint_cp().p)
+            move_cp = PyKDL.Frame(self.puppet.setpoint_cp()[0].M, self.master.setpoint_cp()[0].p)
             self.master.move_cp(move_cp)
             self.last_align = now
 
@@ -183,7 +190,7 @@ class teleoperation:
         # let MTM position move freely, but lock orientation
         wrench = [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.master.body.servo_cf(wrench)
-        self.master.lock_orientation(self.master.measured_cp().M)
+        self.master.lock_orientation(self.master.measured_cp()[0].M)
 
         self.puppet.hold()
 
@@ -220,7 +227,7 @@ class teleoperation:
         self.master.body.servo_cf(wrench)
 
         ### Cartesian pose teleop
-        master_position = self.master.measured_cp()
+        master_position = self.master.measured_cp()[0]
 
         # translation
         master_translation = master_position.p - self.master_cartesian_initial.p
@@ -229,7 +236,7 @@ class teleoperation:
 
         # set rotation of psm to match mtm plus alignment offset
         # if we can actuate the MTM, we slowly reduce the alignment offset to zero over time
-        max_delta = self.align_rate * self.expected_interval
+        max_delta = self.align_rate * self.run_period
         self.offset_angle += math.copysign(min(abs(self.offset_angle), max_delta), -self.offset_angle)
         alignment_offset = PyKDL.Rotation.Rot(self.offset_axis, self.offset_angle)
         puppet_rotation = master_position.M * alignment_offset
@@ -242,7 +249,7 @@ class teleoperation:
         current_gripper = gripper_measured_js[0][0]
 
         ghost_lag = current_gripper - self.gripper_ghost
-        max_delta = self.jaw_rate * self.expected_interval
+        max_delta = self.jaw_rate * self.run_period
         # move ghost at most max_delta towards current gripper
         self.gripper_ghost += math.copysign(min(abs(ghost_lag), max_delta), ghost_lag)
         self.puppet.jaw.servo_jp(numpy.array([self.gripper_to_jaw(self.gripper_ghost)]))
@@ -266,8 +273,8 @@ class teleoperation:
         if not homed_successfully:
             return
 
-        teleop_rate = self.ral.create_rate(int(1/self.expected_interval))
-        print("Running teleop at {} Hz".format(int(1/self.expected_interval)))
+        teleop_rate = self.ral.create_rate(int(1/self.run_period))
+        print("Running teleop at {} Hz".format(int(1/self.run_period)))
 
         self.enter_aligning()
         self.running = True
@@ -301,27 +308,27 @@ class teleoperation:
 
 class MTM:
     class ServoCF:
-        def __init__(self, ral, expected_interval):
-            self.utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, timeout):
+            self.utils = crtk.utils(self, ral, timeout)
             self.utils.add_servo_cf()
 
     class Gripper:
-        def __init__(self, ral, expected_interval):
-            self.utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, timeout):
+            self.utils = crtk.utils(self, ral, timeout)
             self.utils.add_measured_js()
 
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, timeout):
         self.name = arm_name
         self.ral = ral.create_child(arm_name)
-        self.utils = crtk.utils(self, self.ral, expected_interval)
+        self.utils = crtk.utils(self, self.ral, timeout)
 
         self.utils.add_operating_state()
         self.utils.add_measured_cp()
         self.utils.add_setpoint_cp()
         self.utils.add_move_cp()
 
-        self.gripper = self.Gripper(self.ral.create_child('gripper'), expected_interval)
-        self.body = self.ServoCF(self.ral.create_child('body'), expected_interval)
+        self.gripper = self.Gripper(self.ral.create_child('gripper'), timeout)
+        self.body = self.ServoCF(self.ral.create_child('body'), timeout)
 
         # non-CRTK topics
         self.lock_orientation_pub = self.ral.publisher('lock_orientation',
@@ -350,22 +357,22 @@ class MTM:
 
 class PSM:
     class Jaw:
-        def __init__(self, ral, expected_interval):
-            self.utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, timeout):
+            self.utils = crtk.utils(self, ral, timeout)
             self.utils.add_setpoint_js()
             self.utils.add_servo_jp()
 
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, timeout):
         self.name = arm_name
         self.ral = ral.create_child(arm_name)
-        self.utils = crtk.utils(self, self.ral, expected_interval)
+        self.utils = crtk.utils(self, self.ral, timeout)
 
         self.utils.add_operating_state()
         self.utils.add_setpoint_cp()
         self.utils.add_servo_cp()
         self.utils.add_hold()
 
-        self.jaw = self.Jaw(self.ral.create_child('jaw'), expected_interval)
+        self.jaw = self.Jaw(self.ral.create_child('jaw'), timeout)
 
 if __name__ == '__main__':
     # extract ros arguments (e.g. __ns:= for namespace)
@@ -387,12 +394,12 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--no-mtm-alignment', action='store_true',
                         help="don't align mtm (useful for using haptic devices as MTM which don't have wrist actuation)")
     parser.add_argument('-i', '--interval', type=float, default=0.005,
-                        help = 'expected interval in seconds between messages sent by the device')
+                        help = 'time interval/period to run at - should be longer than console\'s period to prevent timeouts')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_python_teleoperation')
-    mtm = MTM(ral, args.mtm, args.interval*2)
-    psm = PSM(ral, args.psm, args.interval*2)
+    mtm = MTM(ral, args.mtm, 4*args.interval)
+    psm = PSM(ral, args.psm, 4*args.interval)
     application = teleoperation(ral, mtm, psm, args.clutch, args.interval,
                                 not args.no_mtm_alignment, operator_present_topic=args.operator)
     ral.spin_and_execute(application.run)
