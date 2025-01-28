@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2021-06-24
 
-# (C) Copyright 2021-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2021-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -55,24 +55,25 @@ class replay_device:
     # simplified jaw class to control the jaws, will not be used without the -j option
     class __jaw_device:
         def __init__(self, ral,
-                     expected_interval, operating_state_instance):
-            self.__crtk_utils = crtk.utils(self, ral,
-                                           expected_interval, operating_state_instance)
+                     operating_state_instance):
+            self.__crtk_utils = crtk.utils(class_instance = self,
+                                           ral = ral,
+                                           operating_state_instance = operating_state_instance)
             self.__crtk_utils.add_move_jp()
             self.__crtk_utils.add_servo_jp()
 
-    def __init__(self, ral, expected_interval):
+    def __init__(self, ral, has_jaw):
         # populate this class with all the ROS topics we need
         self.__ral = ral
-        self.crtk_utils = crtk.utils(self, ral, expected_interval)
+        self.crtk_utils = crtk.utils(self, ral)
         self.crtk_utils.add_operating_state()
         self.crtk_utils.add_servo_jp()
         self.crtk_utils.add_move_jp()
         self.crtk_utils.add_servo_cp()
         self.crtk_utils.add_move_cp()
-        self.jaw = self.__jaw_device(ral.create_child('/jaw'),
-                                     expected_interval,
-                                     operating_state_instance = self)
+        if has_jaw:
+            self.jaw = self.__jaw_device(ral.create_child('/jaw'),
+                                         operating_state_instance = self)
     def ral(self):
         return self.__ral
 
@@ -87,8 +88,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-a', '--arm', type = str, required = True,
                     choices = ['ECM', 'MTML', 'MTMR', 'PSM1', 'PSM2', 'PSM3'],
                     help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-parser.add_argument('-i', '--interval', type = float, default = 0.01,
-                    help = 'expected interval in seconds between messages sent by the device')
 
 if crtk.ral.ros_version() == 1:
     parser.add_argument('-b', '--bag', type = argparse.FileType('r'), required = True,
@@ -144,40 +143,79 @@ if is_cp:
     bbmin = numpy.zeros(3)
     bbmax = numpy.zeros(3)
 
-print('-- Parsing bag %s' % (args.bag.name))
-for bag_topic, bag_message, t in rosbag.Bag(args.bag.name).read_messages():
-    if bag_topic == topic:
-        # check order of timestamps, drop if out of order
-        setpoint_time = ral.to_sec(bag_message.header.stamp)
-        if setpoint_time <= setpoint_time_previous:
-            setpoints_out_of_order += 1
-        else:
-            # append message
-            setpoints.append(bag_message)
-            setpoint_time_previous = setpoint_time
+if crtk.ral.ros_version() == 1:
 
-            # keep track of workspace in cartesian space
-            if is_cp:
-                position = numpy.array([bag_message.pose.position.x,
-                                        bag_message.pose.position.y,
-                                        bag_message.pose.position.z])
-                if len(setpoints) == 1:
-                    bbmin = position
-                    bbmax = position
-                else:
-                    bbmin = numpy.minimum(bbmin, position)
-                    bbmax = numpy.maximum(bbmax, position)
-
-    if has_jaw:
-        if bag_topic == jaw_topic:
+    print('-- Parsing bag %s' % (args.bag.name))
+    for bag_topic, bag_message, t in rosbag.Bag(args.bag.name).read_messages():
+        if bag_topic == topic:
             # check order of timestamps, drop if out of order
-            jaw_setpoint_time = ral.to_sec(bag_message.header.stamp)
-            if jaw_setpoint_time <= jaw_setpoint_time_previous:
-                jaw_setpoints_out_of_order += 1
+            setpoint_time = ral.to_sec(bag_message.header.stamp)
+            if setpoint_time <= setpoint_time_previous:
+                setpoints_out_of_order += 1
             else:
                 # append message
-                jaw_setpoints.append(bag_message)
-                jaw_setpoint_time_previous = jaw_setpoint_time
+                setpoints.append(bag_message)
+                setpoint_time_previous = setpoint_time
+
+        if has_jaw:
+            if bag_topic == jaw_topic:
+                # check order of timestamps, drop if out of order
+                jaw_setpoint_time = ral.to_sec(bag_message.header.stamp)
+                if jaw_setpoint_time <= jaw_setpoint_time_previous:
+                    jaw_setpoints_out_of_order += 1
+                else:
+                    # append message
+                    jaw_setpoints.append(bag_message)
+                    jaw_setpoint_time_previous = jaw_setpoint_time
+
+# ROS2
+else:
+
+    print('-- Parsing bag %s' % (args.bag))
+
+    storage_options = rosbag2_py.StorageOptions(
+        uri = args.bag,
+        storage_id = 'sqlite3')
+    converter_options = rosbag2_py.ConverterOptions(
+        input_serialization_format = 'cdr',
+        output_serialization_format = 'cdr')
+    reader = rosbag2_py.SequentialReader()
+    reader.open(storage_options, converter_options)
+
+    # find messages and topics types
+    topic_types = reader.get_all_topics_and_types()
+    type_map = {topic_types[i].name: topic_types[i].type for i in range(len(topic_types))}
+
+    # parse bag
+    while reader.has_next():
+        (bag_topic, bag_data, t) = reader.read_next()
+        if bag_topic == topic:
+            # deserialize
+            msg_type = rosidl_runtime_py.utilities.get_message(type_map[bag_topic])
+            bag_message = rclpy.serialization.deserialize_message(bag_data, msg_type)
+            # check order of timestamps, drop if out of order
+            setpoint_time = ral.to_sec(bag_message.header.stamp)
+            if setpoint_time <= setpoint_time_previous:
+                setpoints_out_of_order += 1
+            else:
+                # append message
+                setpoints.append(bag_message)
+                setpoint_time_previous = setpoint_time
+
+        if has_jaw:
+            if bag_topic == jaw_topic:
+                # deserialize
+                msg_type = rosidl_runtime_py.utilities.get_message(type_map[bag_topic])
+                bag_message = rclpy.serialization.deserialize_message(bag_data, msg_type)
+                # check order of timestamps, drop if out of order
+                jaw_setpoint_time = ral.to_sec(bag_message.header.stamp)
+                if jaw_setpoint_time <= jaw_setpoint_time_previous:
+                    jaw_setpoints_out_of_order += 1
+                else:
+                    # append message
+                    jaw_setpoints.append(bag_message)
+                    jaw_setpoint_time_previous = jaw_setpoint_time
+
 
 print('-- Found %i setpoints using topic %s' % (len(setpoints), topic))
 if len(setpoints) == 0:
@@ -197,8 +235,21 @@ if has_jaw:
     if jaw_setpoints_out_of_order > 0:
         print('-- Found and removed %i out of order jaw setpoints' % (jaw_setpoints_out_of_order))
 
-# convert to mm
+# compute bounding box
 if is_cp:
+    first = True
+    for setpoint in setpoints:
+        position = numpy.array([setpoint.pose.position.x,
+                                setpoint.pose.position.y,
+                                setpoint.pose.position.z])
+        if first:
+            bbmin = position
+            bbmax = position
+            first = False
+        else:
+            bbmin = numpy.minimum(bbmin, position)
+            bbmax = numpy.maximum(bbmax, position)
+
     bbmin = bbmin * 1000.0
     bbmax = bbmax * 1000.0
     print ('-- Range of motion in mm:\n   X:[%f, %f]\n   Y:[%f, %f]\n   Z:[%f, %f]\n  Make sure these values make sense.  If the ros bag was based on a different console configuration, the base frame might have changed and the trajectory might not be safe nor feasible.'
@@ -209,8 +260,7 @@ duration = ral.to_sec(setpoints[-1].header.stamp) - ral.to_sec(setpoints[0].head
 print ('-- Duration of trajectory: %f seconds' % (duration))
 
 # send trajectory to arm
-arm = replay_device(ral.create_child(args.arm),
-                    expected_interval = args.interval)
+arm = replay_device(ral.create_child(args.arm), has_jaw)
 arm.ral().check_connections()
 
 # make sure the arm is powered
@@ -277,6 +327,7 @@ for index in range(total):
     # if process takes time larger than console rate, don't sleep
     if sleep_time > 0:
         time.sleep(sleep_time)
+
 
 print('\n--> Time to replay trajectory: %f seconds' % (time.time() - start_time))
 print('--> Done!')
