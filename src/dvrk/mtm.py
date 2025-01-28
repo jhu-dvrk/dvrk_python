@@ -22,15 +22,15 @@ class mtm(arm):
 
     # class to contain gripper methods
     class __Gripper:
-        def __init__(self, ral, expected_interval):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, connection_timeout):
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
             self.__crtk_utils.add_measured_js()
 
     # initialize the robot
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, connection_timeout = 5.0):
         # first call base class constructor
-        super().__init__(ral, arm_name, expected_interval)
-        self.gripper = self.__Gripper(self.ral().create_child('/gripper'), expected_interval)
+        super().__init__(ral, arm_name, connection_timeout)
+        self.gripper = self.__Gripper(self.ral().create_child('/gripper'), connection_timeout)
 
         # publishers
         self.__lock_orientation_publisher = self.ral().publisher('lock_orientation',
