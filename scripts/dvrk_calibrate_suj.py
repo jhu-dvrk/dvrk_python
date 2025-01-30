@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2024-01-09
 
-# (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2024-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -30,26 +30,26 @@ class suj(object):
     class __Arm:
 
         class __Voltages:
-            def __init__(self, ral, expected_interval):
-                self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+            def __init__(self, ral):
+                self.__crtk_utils = crtk.utils(self, ral)
                 self.__crtk_utils.add_measured_js()
 
-        def __init__(self, ral, expected_interval):
+        def __init__(self, ral):
             self.__ral = ral
-            self.primary_voltage = self.__Voltages(ral.create_child('/primary_voltage'), expected_interval)
-            self.secondary_voltage = self.__Voltages(ral.create_child('/secondary_voltage'), expected_interval)
+            self.primary_voltage = self.__Voltages(ral.create_child('/primary_voltage'))
+            self.secondary_voltage = self.__Voltages(ral.create_child('/secondary_voltage'))
 
         def ral(self):
             return self.__ral
 
     # initialize the all SUJ arms
-    def __init__(self, ral, expected_interval = 1.0):
+    def __init__(self, ral):
         """Constructor.  This initializes a few data members and creates
         instances of classes for each SUJ arm."""
         self.__ral = ral.create_child('SUJ')
-        self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        self.__crtk_utils = crtk.utils(self, ral)
         for arm in ('ECM', 'PSM1', 'PSM2', 'PSM3'):
-            setattr(self, arm, self.__Arm(self.__ral.create_child(arm), expected_interval))
+            setattr(self, arm, self.__Arm(self.__ral.create_child(arm)))
 
     def ral(self):
         return self.__ral
@@ -145,7 +145,7 @@ class main_widget(QWidget):
     def timer_cb(self):
         counter = 0
         for v in self.all_voltages.values():
-            jp = v.measured_jp()
+            jp, _ = v.measured_jp()
             v.minimum = numpy.minimum(v.minimum, jp)
             v.maximum = numpy.maximum(v.maximum, jp)
             for i in range(v.nb_joints):
@@ -188,7 +188,6 @@ class main_widget(QWidget):
         msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         result = msg.exec()
         if result == QMessageBox.Ok:
-            self.ral.shutdown()
             self.app.quit()
 
     def closeEvent(self, event):

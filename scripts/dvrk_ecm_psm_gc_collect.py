@@ -2,7 +2,7 @@
 
 # Authors: Anton Deguet
 # Date: 2018-09-10
-# Copyright JHU 2018-2023
+# Copyright JHU 2018-2025
 
 # Simple script to collect data on ECM Classic for gravity
 # compensation identification.
@@ -20,11 +20,10 @@ import dvrk
 import numpy
 import argparse
 
-def dvrk_ecm_psm_gc_collect(ral, name, expected_interval):
+def dvrk_ecm_psm_gc_collect(ral, name):
     # create dVRK robot
     robot = dvrk.ecm(ral = ral,
-                     arm_name = name,
-                     expected_interval = expected_interval)
+                     arm_name = name)
     ral.check_connections()
 
     if name == 'ECM':
@@ -46,8 +45,8 @@ def dvrk_ecm_psm_gc_collect(ral, name, expected_interval):
     upper_limits = [ 80.0 * d2r,  60.0 * d2r,  0.230]
 
     # set sampling for data
-    # increments = [40.0 * d2r, 40.0 * d2r, 0.10] # less samples
-    increments = [20.0 * d2r, 20.0 * d2r, 0.05] # more samples
+    increments = [40.0 * d2r, 40.0 * d2r, 0.10] # less samples
+    # increments = [20.0 * d2r, 20.0 * d2r, 0.05] # more samples
     directions = [1.0, 1.0, 1.0]
 
     # start position
@@ -84,12 +83,9 @@ def dvrk_ecm_psm_gc_collect(ral, name, expected_interval):
                                        positions[2],
                                        0.0, 0.0, 0.0])).wait()
         time.sleep(1.0)
-        writer.writerow([robot.measured_jp()[0],
-                         robot.measured_jp()[1],
-                         robot.measured_jp()[2],
-                         robot.measured_jf()[0],
-                         robot.measured_jf()[1],
-                         robot.measured_jf()[2]])
+        jp, jv, jf, _ = robot.measured_js()
+        writer.writerow([jp[0], jp[1], jp[2],
+                         jf[0], jf[1], jf[2]])
 
     f.close()
     robot.move_jp(numpy.array([0.0, 0.0, 0.0, 0.0])).wait()
@@ -103,9 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['ECM', 'PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                        help = 'expected interval in seconds between messages sent by the device')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_ecm_psm_gc_collect')
-    ral.spin_and_execute(dvrk_ecm_psm_gc_collect, ral, args.arm, args.interval)
+    ral.spin_and_execute(dvrk_ecm_psm_gc_collect, ral, args.arm)
