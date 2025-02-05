@@ -13,15 +13,7 @@
 
 # --- end cisst license ---
 
-### Instructions:
-# First start a console:
-# > ros2 run dvrk_robot dvrk_console_json -j jhu-dVRK/console-MTML-PSM2-Teleop.json
-# or to use a Falon/ForceDimension haptic device as the MTM:
-# > ros2 run dvrk_robot dvrk_console_json -j jhu-dVRK/console-Falcon-PSM2-TeleopDerived.json -C -p 0.001
-
-# Next, start the teleoperation script for (e.g.) MTML/PSM1 via:
-# > rosrun dvrk_python dvrk_teleoperation -m MTML -p PSM1
-# If using a haptic device with unactuated wrist, make sure to add the -n flag
+"""For instructions, see https://dvrk.readthedocs.io, and search for \"dvrk_teleoperation\""""
 
 import argparse
 import crtk
@@ -380,26 +372,26 @@ if __name__ == '__main__':
 
     # parse arguments
     parser = argparse.ArgumentParser(description = __doc__,
-                                     formatter_class = argparse.RawTextHelpFormatter)
-    parser.add_argument('-m', '--mtm', type = str, default='MTML', # required = True,
+                                     formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-m', '--mtm', type = str, required = True,
                         choices = ['MTML', 'MTMR'],
-                        help = 'MTM arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-p', '--psm', type = str, default='PSM2', # required = True,
+                        help = 'MTM arm name corresponding to ROS topics without namespace. Use __ns:= to specify the namespace')
+    parser.add_argument('-p', '--psm', type = str, required = True,
                         choices = ['PSM1', 'PSM2', 'PSM3'],
-                        help = 'PSM arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
+                        help = 'PSM arm name corresponding to ROS topics without namespace. Use __ns:= to specify the namespace')
     parser.add_argument('-c', '--clutch', type = str, default='/footpedals/clutch',
                         help = 'ROS topic corresponding to clutch button/pedal input')
     parser.add_argument('-o', '--operator', type = str, default='/footpedals/coag', const=None, nargs='?',
-                        help = 'ROS topic corresponding to operator present button/pedal/sensor input')
+                        help = 'ROS topic corresponding to operator present button/pedal/sensor input - use "-o" without an argument to disable')
     parser.add_argument('-n', '--no-mtm-alignment', action='store_true',
                         help="don't align mtm (useful for using haptic devices as MTM which don't have wrist actuation)")
     parser.add_argument('-i', '--interval', type=float, default=0.005,
-                        help = 'time interval/period to run at - should be longer than console\'s period to prevent timeouts')
+                        help = 'time interval/period to run at - should be as long as console\'s period to prevent timeouts')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_python_teleoperation')
-    mtm = MTM(ral, args.mtm, 4*args.interval)
-    psm = PSM(ral, args.psm, 4*args.interval)
+    mtm = MTM(ral, args.mtm, timeout=4*args.interval)
+    psm = PSM(ral, args.psm, timeout=4*args.interval)
     application = teleoperation(ral, mtm, psm, args.clutch, args.interval,
                                 not args.no_mtm_alignment, operator_present_topic=args.operator)
     ral.spin_and_execute(application.run)
