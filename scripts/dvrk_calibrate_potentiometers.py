@@ -60,15 +60,15 @@ class potentiometer_calibration:
         # Create the dVRK python ROS client
         self.ral = ral
         self.arm = dvrk.arm(ral = ral, arm_name = arm_name)
-        self.potentiometers = self.__sensor(ral.create_child(arm_name + '/io/pot'))
-        self.encoders = self.__sensor(ral.create_child(arm_name + '/io/actuator'))
+        self.potentiometers = self.__sensor(ral.create_child('io/' + arm_name + '/pot'))
+        self.encoders = self.__sensor(ral.create_child('io/' + arm_name))
 
 
     def run(self, calibration_type, filename):
         try:
             self.ral.check_connections() # making sure the dvrk_console_json is running
         except TimeoutError as e:
-            print('Error: check_connections failed.  Make sure the dvrk_console_json is started and uses the option -i ros-io-{}.json'.format(self.ros_namespace))
+            print('Error: check_connections failed.  Make sure the dvrk_console_json is started and uses the option -K')
             print(e)
             return
 
@@ -169,7 +169,7 @@ class potentiometer_calibration:
             self.potentiometers.measured_jp()
         except:
             print('It seems the console for {} is not started or is not publishing the IO topics'.format(self.ros_namespace))
-            print('Make sure you use "ros2 run dvrk_robot dvrk_console_json" with -i ros-io-{}.json'.format(self.ros_namespace))
+            print('Make sure you use "ros2 run dvrk_robot dvrk_console_json" with -K')
             print('Start the dvrk_console_json with the proper options first')
             return
 
