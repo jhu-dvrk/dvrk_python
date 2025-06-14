@@ -14,7 +14,7 @@
 # --- end cisst license ---
 
 # Start a single arm using
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 # Run test script:
 # > rosrun dvrk_python dvrk_psm_effort_test.py -a <arm-name>
 

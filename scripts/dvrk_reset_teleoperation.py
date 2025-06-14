@@ -13,8 +13,8 @@
 
 # --- end cisst license ---
 
-# Start a console with at least one PSM teleoperation component
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# Start a dVRK system with at least one PSM teleoperation component
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 
 # To reset the arms in the
 # > rosrun dvrk_python dvrk_reset_teleoperation -m <mtm-name> -p <psm-name>

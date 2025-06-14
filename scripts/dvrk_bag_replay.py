@@ -18,7 +18,7 @@
 # Hit ctrl+c to stop rosbag recording
 
 # Then start a single arm using:
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 
 # After that, you can replay the trajectory using:
 # > rosrun dvrk_python dvrk_bag_replay.py -a PSM1 -b /home/anton/2021-06-24-10-55-04.bag -m servo_cp
@@ -100,7 +100,7 @@ parser.add_argument('-m', '--mode', type = str, required = True,
                     choices = ['servo_jp', 'servo_cp'],
                     help = 'topic used to send command to arm, either joint or cartesian positions')
 parser.add_argument('-t', '--topic', type = str,
-                    help = 'topic used in the ros bag.  If not set, the script will use /<arm>/setpoint_cp.  Other examples: /PSM1/local/setpoint_cp.  This is useful if you recorded the trajectory on a PSM with a base-frame defined in the console.json and you are replaying the trajectory on a PSM without a base-frame (e.g. default console provided with PSM in kinematic simulation mode.  This option allows to use the recorded setpoints without base-frame')
+                    help = 'topic used in the ros bag.  If not set, the script will use /<arm>/setpoint_cp.  Other examples: /PSM1/local/setpoint_cp.  This is useful if you recorded the trajectory on a PSM with a base_frame defined in the system.json and you are replaying the trajectory on a PSM without a base_frame (e.g. default system configuration provided with PSM in kinematic simulation mode.  This option allows to use the recorded setpoints without base-frame')
 parser.add_argument('-j', '--jaw', action = 'store_true',
                     help = 'specify if the PSM jaw should also be replayed.  The topic /<arm>/jaw/setpoint_js will be used to determine the jaw trajectory')
 
@@ -252,7 +252,7 @@ if is_cp:
 
     bbmin = bbmin * 1000.0
     bbmax = bbmax * 1000.0
-    print ('-- Range of motion in mm:\n   X:[%f, %f]\n   Y:[%f, %f]\n   Z:[%f, %f]\n  Make sure these values make sense.  If the ros bag was based on a different console configuration, the base frame might have changed and the trajectory might not be safe nor feasible.'
+    print ('-- Range of motion in mm:\n   X:[%f, %f]\n   Y:[%f, %f]\n   Z:[%f, %f]\n  Make sure these values make sense.  If the ros bag was based on a different system configuration, the base frame might have changed and the trajectory might not be safe nor feasible.'
            % (bbmin[0], bbmax[0], bbmin[1], bbmax[1], bbmin[2], bbmax[2]))
 
 # compute duration
@@ -324,7 +324,7 @@ for index in range(total):
     # try to keep motion synchronized
     loop_end_time = time.time()
     sleep_time = delta_bag_time - (loop_end_time - loop_start_time)
-    # if process takes time larger than console rate, don't sleep
+    # if process takes time larger than system rate, don't sleep
     if sleep_time > 0:
         time.sleep(sleep_time)
 

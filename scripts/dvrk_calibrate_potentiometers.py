@@ -66,9 +66,9 @@ class potentiometer_calibration:
 
     def run(self, calibration_type, filename):
         try:
-            self.ral.check_connections() # making sure the dvrk_console_json is running
+            self.ral.check_connections() # making sure dvrk_robot dvrk_system is running
         except TimeoutError as e:
-            print('Error: check_connections failed.  Make sure the dvrk_console_json is started and uses the option -K')
+            print('Error: check_connections failed.  Make sure the dvrk_robot/dvrk_system node is started and uses the option -K')
             print(e)
             return
 
@@ -78,7 +78,7 @@ class potentiometer_calibration:
         samples_so_far = 0
 
         sleep_time_after_motion = 0.5 # time after motion from position to position to allow potentiometers to stabilize
-        sleep_time_between_samples = 0.01 # time between two samples read (potentiometers), assuming dvrk_console is started with default 100Hz
+        sleep_time_between_samples = 0.01 # time between two samples read (potentiometers), assuming dvrk_system is started with default 100Hz
 
         encoders = []
         potentiometers = []
@@ -168,14 +168,14 @@ class potentiometer_calibration:
             time.sleep(0.2)
             self.potentiometers.measured_jp()
         except:
-            print('It seems the console for {} is not started or is not publishing the IO topics'.format(self.ros_namespace))
-            print('Make sure you use "ros2 run dvrk_robot dvrk_console_json" with -K')
-            print('Start the dvrk_console_json with the proper options first')
+            print('It seems the dVRK system node for {} is not started or is not publishing the IO topics'.format(self.ros_namespace))
+            print('Make sure you use "ros2 run dvrk_robot dvrk_system" with -K')
+            print('Start the dvrk_system with the proper options first')
             return
 
 
         print('The serial number found in the XML file is: {}'.format(self.serial_number))
-        print('Make sure the dvrk_console_json is using the same configuration file.  Serial number can be found in GUI tab "IO".')
+        print('Make sure the dvrk_system node is using the same configuration file.  Serial number can be found in GUI tab "IO".')
         ok = input('Press "c" and [enter] to continue\n')
         if ok != 'c':
             print('Quitting')
