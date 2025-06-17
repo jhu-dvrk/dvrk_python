@@ -39,7 +39,7 @@ import time
 class reset_teleoperation:
 
     # configuration
-    def __init__(self, ral, mtms, psms):
+    def __init__(self, ral, console_name, mtms, psms):
         print('dvrk_reset_teleoperation for MTM(s): {} and PSM(s): {}'.format(mtms, psms))
         self.ral = ral
         self.mtms = []
@@ -50,7 +50,7 @@ class reset_teleoperation:
         for psm in psms:
             self.psms.append(dvrk.psm(ral = ral,
                                       arm_name = psm))
-        self.console = dvrk.console(ral = ral)
+        self.console = dvrk.console(ral = ral, console_name = console_name)
 
     # run
     def run(self):
@@ -87,6 +87,8 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser(description = __doc__,
                                      formatter_class = argparse.RawTextHelpFormatter)
+    parser.add_argument('-c', '--console', type = str, required = True,
+                        help = 'console name as seen in the dVRK system application GUI or in ROS topics')
     parser.add_argument('-m', '--mtms', type = str, required = True,
                         action = 'extend', nargs = '+',
                         choices = ['MTML', 'MTMR'],
@@ -98,5 +100,5 @@ if __name__ == '__main__':
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_reset_teleoperation')
-    application = reset_teleoperation(ral, args.mtms, args.psms)
+    application = reset_teleoperation(ral, args.console, args.mtms, args.psms)
     ral.spin_and_execute(application.run)
