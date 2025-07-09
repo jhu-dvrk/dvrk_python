@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2021-01-29
 
-# (C) Copyright 2021 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2021-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -14,7 +14,7 @@
 # --- end cisst license ---
 
 # Start a single arm using
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 # Run test script:
 # > rossun dvrk_python dvrk_move_wait_test.py -a <arm-name>
 
@@ -27,10 +27,9 @@ import sys
 import time
 
 
-def main(ral, arm_name, expected_interval):
+def main(ral, arm_name):
     arm = dvrk.arm(ral = ral,
-                   arm_name = arm_name,
-                   expected_interval = expected_interval)
+                   arm_name = arm_name)
 
     ral.check_connections()
 
@@ -42,7 +41,8 @@ def main(ral, arm_name, expected_interval):
     print('starting move_jp')
 
     # get current position
-    initial_joint_position = numpy.copy(arm.setpoint_jp())
+    jp, _ = arm.setpoint_jp()
+    initial_joint_position = numpy.copy(jp)
     amplitude = math.radians(10.0)
     goal = numpy.copy(initial_joint_position)
 
@@ -103,11 +103,10 @@ if __name__ == "__main__":
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--arm', type=str, required=True,
-                    choices=['ECM', 'MTML', 'MTMR', 'PSM1', 'PSM2', 'PSM3'],
-                    help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                    help = 'expected interval in seconds between messages sent by the device')
+                        choices=['ECM', 'MTML', 'MTMR', 'PSM1', 'PSM2', 'PSM3'],
+                        help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
+
     args = parser.parse_args(argv)
 
-    run = lambda: main(ral, args.arm, args.interval)
+    run = lambda: main(ral, args.arm)
     ral.spin_and_execute(run)

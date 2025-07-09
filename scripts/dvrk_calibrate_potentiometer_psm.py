@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2015-02-22
 
-# (C) Copyright 2015-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2015-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -14,7 +14,7 @@
 # --- end cisst license ---
 
 # Start a single arm using
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 
 # To communicate with the arm using ROS topics, see the python based example dvrk_arm_test.py:
 # > rosrun dvrk_python dvrk_arm_test.py <arm-name>
@@ -42,9 +42,9 @@ def is_there_a_key_press():
 class calibration_psm:
 
     # configuration
-    def __init__(self, ral, arm_name, config_file, expected_interval = 0.01):
-        self.expected_interval = expected_interval
+    def __init__(self, ral, arm_name, config_file, period):
         self.config_file = config_file
+        self.rate = ral.create_rate(1.0 / period)
         # check that the config file is good
         if not os.path.exists(self.config_file):
             sys.exit('Config file "{:s}" not found'.format(self.config_file))
@@ -84,8 +84,7 @@ class calibration_psm:
             print('Potentiometer offset for joint 2 is currently: {:s}'.format(self.xmlPot.get('Offset')))
 
         self.arm = dvrk.psm(ral = ral,
-                            arm_name = arm_name,
-                            expected_interval = expected_interval)
+                            arm_name = arm_name)
         self.arm.check_connections()
 
     # homing example
@@ -99,7 +98,8 @@ class calibration_psm:
 
         # get current joints just to set size
         print('Moving to zero position...')
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         goal.fill(0)
         self.arm.move_jp(goal).wait()
         self.arm.jaw.move_jp(numpy.array([0.0])).wait()
@@ -118,7 +118,8 @@ class calibration_psm:
         self.min = math.radians( 180.0)
         self.max = math.radians(-180.0)
         done = False
-        increment = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        increment = numpy.copy(jp)
         increment.fill(0)
 
         # termios settings
@@ -134,7 +135,7 @@ class calibration_psm:
                     elif c == 'q':
                         sys.exit('... calibration aborted by user')
                 # get measured joint values
-                p = self.arm.measured_jp()
+                p, _ = self.arm.measured_jp()
                 if p[swing_joint] > self.max:
                     self.max = p[swing_joint]
                 elif p[swing_joint] < self.min:
@@ -142,8 +143,7 @@ class calibration_psm:
                 # display current range
                 sys.stdout.write('\rRange[%02.2f, %02.2f]' % (math.degrees(self.min), math.degrees(self.max)))
                 sys.stdout.flush()
-                # sleep
-                time.sleep(self.expected_interval)
+                self.rate.sleep()
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         print('')
@@ -152,8 +152,9 @@ class calibration_psm:
     def calibrate_third_joint(self, swing_joint):
         print('\nAdjusting translation offset\nPress the keys "+" (or "=") and "-" or ("_") to adjust the depth until the axis 5 is mostly immobile (one can use a camera to look at the point)\n - press "d" when you\'re done\n - press "q" to abort\n')
         # move to max position as starting point
-        initial_joint_position = numpy.copy(self.arm.setpoint_jp())
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        initial_joint_position = numpy.copy(jp)
+        goal = numpy.copy(jp)
         goal.fill(0)
         goal[swing_joint] = self.max
         goal[2] = self.q2 # to start close to expected RCM
@@ -196,7 +197,7 @@ class calibration_psm:
                 sys.stdout.write('\rCorrection = %02.2f mm' % (correction * 1000.0))
                 sys.stdout.flush()
                 # sleep
-                time.sleep(self.expected_interval)
+                self.rate.sleep()
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         print('')
@@ -229,8 +230,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                        help = 'expected interval in seconds between messages sent by the device')
+    parser.add_argument('-p', '--period', type =float, default = 0.01,
+                        help = 'period used for loops using servo commands')
     parser.add_argument('-c', '--config', type=str, required=True,
                         help = 'arm IO config file, i.e. something like sawRobotIO1394-xwz-12345.xml')
     parser.add_argument('-s', '--swing-joint', type=int, required=False,
@@ -251,5 +252,5 @@ if __name__ == '__main__':
            ' -2- adjust the depth so that the first hinge on the tool wrist is as close as possible to the RCM.\n\n')
 
     ral = crtk.ral('dvrk_calibrate_potentiometer_psm')
-    application = calibration_psm(ral, args.arm, args.config, args.interval)
+    application = calibration_psm(ral, args.arm, args.config, args.period)
     ral.spin_and_execute(application.run, args.swing_joint)

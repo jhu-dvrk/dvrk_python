@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.16)
 project (dvrk_python VERSION 2.3.0)
 
 # first test for ROS1

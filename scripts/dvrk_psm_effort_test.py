@@ -3,7 +3,7 @@
 # Author: Anton Deguet
 # Date: 2015-02-22
 
-# (C) Copyright 2015-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2015-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -14,7 +14,7 @@
 # --- end cisst license ---
 
 # Start a single arm using
-# > rosrun dvrk_robot dvrk_console_json -j <console-file>
+# > rosrun dvrk_robot dvrk_system -j <system-file>
 # Run test script:
 # > rosrun dvrk_python dvrk_psm_effort_test.py -a <arm-name>
 
@@ -30,13 +30,11 @@ if sys.version_info.major < 3:
 
 # example of application using arm.py
 class example_application:
-    def __init__(self, ral, arm_name, expected_interval):
+    def __init__(self, ral, arm_name):
         print('configuring dvrk_psm_effort_test for {}'.format(arm_name))
         self.ral = ral
-        self.expected_interval = expected_interval
         self.arm = dvrk.psm(ral = ral,
-                            arm_name = arm_name,
-                            expected_interval = expected_interval)
+                            arm_name = arm_name)
         self.arm.check_connections()
 
     # homing example
@@ -49,28 +47,19 @@ class example_application:
             sys.exit('failed to home within 10 seconds')
         # get current joints just to set size
         print('move to starting position')
-        goal = numpy.copy(self.arm.setpoint_jp())
+        jp, _ = self.arm.setpoint_jp()
+        goal = numpy.copy(jp)
         # go to zero position, make sure 3rd joint is past cannula
         goal.fill(0)
         goal[2] = 0.12
         self.arm.move_jp(goal).wait()
 
-    # utility to position tool/camera deep enough before cartesian examples
-    def prepare_cartesian(self):
-        # make sure the camera is past the cannula and tool vertical
-        goal = numpy.copy(self.arm.setpoint_jp())
-        if ((self.arm.name() == 'PSM1') or (self.arm.name() == 'PSM2') or (self.arm.name() == 'PSM3') or (self.arm.name() == 'ECM')):
-            # set in position joint mode
-            goal[0] = 0.0
-            goal[1] = 0.0
-            goal[2] = 0.12
-            self.arm.move_jp().wait()
-
     # effort jaw control example
     def jaw_effort(self):
         print('starting jaw effort')
         # get current joint torques just to set size
-        effort_joint = numpy.copy(self.arm.measured_jf())
+        jf, _ = self.arm.measured_jf()
+        effort_joint = numpy.copy(jf)
         print(effort_joint)
         effort_joint.fill(0.0)
 
@@ -91,7 +80,8 @@ class example_application:
     def joint_effort(self):
         print('starting joint effort')
         # get current joint torques just to set size
-        effort_joint = numpy.copy(self.arm.measured_jf())
+        jf, _ = self.arm.measured_jf()
+        effort_joint = numpy.copy(jf)
         effort_joint.fill(0.0)
 
         print('the jaws and arm will go limp')
@@ -111,10 +101,11 @@ class example_application:
 
         print('arm will now apply sine wave forces on first two joints')
         input('press Enter to continue...')
+        period = 0.01  # about 100hz
         duration = 10  # seconds
-        samples = duration / self.expected_interval
+        samples = duration / period
 
-        sleep_rate = self.ral.create_rate(1.0 / self.expected_interval)
+        sleep_rate = self.ral.create_rate(1.0 / period)
         # create a new goal starting with current position
         for i in range(int(samples)):
             effort_joint[0] = 0.5 *  (1.0 - math.cos(i * 10.0 * math.radians(360.0) / samples))
@@ -131,7 +122,8 @@ class example_application:
     def wrench_jaw_effort(self):
         print('starting wrench jaw effort')
         # get current joint torques just to set size
-        effort_joint = numpy.copy(self.arm.measured_jf())
+        jf, _ = self.arm.measured_jf()
+        effort_joint = numpy.copy(jf)
         effort_joint.fill(0.0)
 
         print('the jaws will open and arm will go limp')
@@ -172,10 +164,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-i', '--interval', type=float, default=0.01,
-                        help = 'expected interval in seconds between messages sent by the device')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_psm_effort_test')
-    application = example_application(ral, args.arm, args.interval)
+    application = example_application(ral, args.arm)
     ral.spin_and_execute(application.run)

@@ -1,7 +1,7 @@
 #  Author(s):  Anton Deguet
 #  Created on: 2016-05
 
-# (C) Copyright 2016-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2016-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -21,30 +21,30 @@ class suj(object):
 
         # local kinematics
         class __Local:
-            def __init__(self, ral, expected_interval):
-                self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+            def __init__(self, ral, connection_timeout):
+                self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
                 self.__crtk_utils.add_measured_cp()
 
-        def __init__(self, ral, expected_interval):
+        def __init__(self, ral, connection_timeout):
             self.__ral = ral
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
             self.__crtk_utils.add_operating_state()
             self.__crtk_utils.add_measured_js()
             self.__crtk_utils.add_measured_cp()
             self.__crtk_utils.add_move_jp() # for simulated SUJs only
-            self.local = self.__Local(ral.create_child('/local'), expected_interval)
+            self.local = self.__Local(ral.create_child('/local'), connection_timeout)
 
         def ral(self):
             return self.__ral
 
     # initialize the all SUJ arms
-    def __init__(self, ral, expected_interval = 1.0):
+    def __init__(self, ral, connection_timeout = 1.0):
         """Constructor.  This initializes a few data members and creates
         instances of classes for each SUJ arm."""
         self.__ral = ral.create_child('SUJ')
-        self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
         for arm in ('ECM', 'PSM1', 'PSM2', 'PSM3'):
-            setattr(self, arm, self.__Arm(ral.create_child(arm), expected_interval))
+            setattr(self, arm, self.__Arm(ral.create_child(arm), connection_timeout))
 
     def ral(self):
         return self.__ral

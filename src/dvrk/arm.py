@@ -1,7 +1,7 @@
 #  Author(s):  Anton Deguet
 #  Created on: 2016-05
 
-# (C) Copyright 2016-2023 Johns Hopkins University (JHU), All Rights Reserved.
+# (C) Copyright 2016-2024 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -32,22 +32,22 @@ class arm(object):
 
     # class to contain spatial/body cf methods
     class __MeasuredServoCf:
-        def __init__(self, ral, expected_interval):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, connection_timeout):
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
             self.__crtk_utils.add_measured_cf()
             self.__crtk_utils.add_servo_cf()
             self.__crtk_utils.add_jacobian()
 
     # local kinematics
     class __Local:
-        def __init__(self, ral, expected_interval):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, connection_timeout):
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
             self.__crtk_utils.add_measured_cp()
             self.__crtk_utils.add_setpoint_cp()
             self.__crtk_utils.add_forward_kinematics()
 
     # initialize the arm
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, connection_timeout = 1.0):
         """Requires a arm name, this will be used to find the ROS
         topics for the arm being controlled.  For example if the
         user wants `PSM1`, the ROS topics will be from the namespace
@@ -56,7 +56,7 @@ class arm(object):
         self.__ral = ral.create_child(arm_name)
 
         # crtk features
-        self.__crtk_utils = crtk.utils(self, self.__ral, expected_interval)
+        self.__crtk_utils = crtk.utils(self, self.__ral, connection_timeout)
 
         # add crtk features that we need and are supported by the dVRK
         self.__crtk_utils.add_operating_state()
@@ -77,9 +77,9 @@ class arm(object):
         self.__crtk_utils.add_forward_kinematics()
         self.__crtk_utils.add_inverse_kinematics()
 
-        self.spatial = self.__MeasuredServoCf(self.__ral.create_child('spatial'), expected_interval)
-        self.body = self.__MeasuredServoCf(self.__ral.create_child('body'), expected_interval)
-        self.local = self.__Local(self.__ral.create_child('local'), expected_interval)
+        self.spatial = self.__MeasuredServoCf(self.__ral.create_child('spatial'), connection_timeout)
+        self.body = self.__MeasuredServoCf(self.__ral.create_child('body'), connection_timeout)
+        self.local = self.__Local(self.__ral.create_child('local'), connection_timeout)
 
         # publishers
         self.__body_set_cf_orientation_absolute_pub = self.__ral.publisher(

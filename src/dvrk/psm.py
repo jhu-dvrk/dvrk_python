@@ -1,7 +1,7 @@
 #  Author(s):  Anton Deguet
 #  Created on: 2016-05
 
-#   (C) Copyright 2016-2023 Johns Hopkins University (JHU), All Rights Reserved.
+#   (C) Copyright 2016-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -22,8 +22,8 @@ class psm(arm):
 
     # class to contain jaw methods
     class __Jaw:
-        def __init__(self, ral, expected_interval, operating_state_instance):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval, operating_state_instance)
+        def __init__(self, ral, connection_timeout, operating_state_instance):
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout, operating_state_instance)
             self.__crtk_utils.add_measured_js()
             self.__crtk_utils.add_setpoint_js()
             self.__crtk_utils.add_servo_jp()
@@ -40,11 +40,11 @@ class psm(arm):
 
 
     # initialize the robot
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, connection_timeout = 5.0):
         # first call base class constructor
-        super().__init__(ral, arm_name, expected_interval)
+        super().__init__(ral, arm_name, connection_timeout)
         jaw_ral = self.ral().create_child('/jaw')
-        self.jaw = self.__Jaw(jaw_ral, expected_interval,
+        self.jaw = self.__Jaw(jaw_ral, connection_timeout,
                               operating_state_instance = self)
 
         # publishers
@@ -54,7 +54,8 @@ class psm(arm):
 
     def insert_jp(self, depth):
         "insert the tool, by moving it to an absolute depth"
-        goal = numpy.copy(self.setpoint_jp())
+        jp, _ = self.setpoint_jp()
+        goal = numpy.copy(jp)
         goal[2] = depth
         return self.move_jp(goal)
 

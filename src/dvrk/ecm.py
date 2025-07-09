@@ -1,7 +1,7 @@
 #  Author(s):  Anton Deguet
 #  Created on: 2016-05
 
-#   (C) Copyright 2016-2023 Johns Hopkins University (JHU), All Rights Reserved.
+#   (C) Copyright 2016-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -19,12 +19,13 @@ class ecm(arm):
     """Simple robot API wrapping around ROS messages"""
 
     # initialize the robot
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, connection_timeout = 5.0):
         # first call base class constructor
-        super().__init__(ral, arm_name, expected_interval)
+        super().__init__(ral, arm_name, connection_timeout)
 
     def insert_jp(self, depth):
         "insert the tool, by moving it to an absolute depth"
-        goal = numpy.copy(self.setpoint_jp())
+        jp, _ = self.setpoint_jp()
+        goal = numpy.copy(jp)
         goal[2] = depth
         return self.move_jp(goal)

@@ -1,7 +1,7 @@
 #  Author(s):  Anton Deguet
 #  Created on: 2016-05
 
-#   (C) Copyright 2016-2023 Johns Hopkins University (JHU), All Rights Reserved.
+#   (C) Copyright 2016-2025 Johns Hopkins University (JHU), All Rights Reserved.
 
 # --- begin cisst license - do not edit ---
 
@@ -22,21 +22,21 @@ class mtm(arm):
 
     # class to contain gripper methods
     class __Gripper:
-        def __init__(self, ral, expected_interval):
-            self.__crtk_utils = crtk.utils(self, ral, expected_interval)
+        def __init__(self, ral, connection_timeout):
+            self.__crtk_utils = crtk.utils(self, ral, connection_timeout)
             self.__crtk_utils.add_measured_js()
 
     # initialize the robot
-    def __init__(self, ral, arm_name, expected_interval = 0.01):
+    def __init__(self, ral, arm_name, connection_timeout = 5.0):
         # first call base class constructor
-        super().__init__(ral, arm_name, expected_interval)
-        self.gripper = self.__Gripper(self.ral().create_child('/gripper'), expected_interval)
+        super().__init__(ral, arm_name, connection_timeout)
+        self.gripper = self.__Gripper(self.ral().create_child('/gripper'), connection_timeout)
 
         # publishers
         self.__lock_orientation_publisher = self.ral().publisher('lock_orientation',
                                                                  geometry_msgs.msg.Quaternion,
                                                                  latch = True, queue_size = 1)
-        
+
         self.__unlock_orientation_publisher = self.ral().publisher('unlock_orientation',
                                                                    std_msgs.msg.Empty,
                                                                    latch = True, queue_size = 1)
@@ -48,8 +48,11 @@ class mtm(arm):
 
     def lock_orientation_as_is(self):
         "Lock orientation based on current orientation"
-        current = self.setpoint_cp()
-        self.lock_orientation(current.M)
+        current, ts = self.setpoint_cp()
+        if ts:
+            self.lock_orientation(current.M)
+        else:
+            raise RuntimeError('setpoint_cp is not valid')
 
     def lock_orientation(self, orientation):
         """Lock orientation, expects a PyKDL rotation matrix (PyKDL.Rotation)"""
