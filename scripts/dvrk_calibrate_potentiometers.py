@@ -13,11 +13,10 @@ import numpy
 import argparse
 import os.path
 import os
+import json
 
 import dvrk
 import crtk
-
-import xml.etree.ElementTree as ET
 
 # for actuator_to_joint_position
 import cisst_msgs.srv
@@ -54,14 +53,14 @@ class potentiometer_calibration:
             self.__crtk_utils.add_measured_js()
 
 
-    def __init__(self, ral, arm_name):
-        self.serial_number = ""
+    def __init__(self, ral, arm_name, IO_name):
+        self.serial_number = ''
         self.ros_namespace = arm_name
         # Create the dVRK python ROS client
         self.ral = ral
         self.arm = dvrk.arm(ral = ral, arm_name = arm_name)
-        self.potentiometers = self.__sensor(ral.create_child('io/' + arm_name + '/pot'))
-        self.encoders = self.__sensor(ral.create_child('io/' + arm_name))
+        self.potentiometers = self.__sensor(ral.create_child('IO/' + IO_name + '/' + arm_name + '/pot'))
+        self.encoders = self.__sensor(ral.create_child('IO/' + IO_name + '/' + arm_name))
 
 
     def run(self, calibration_type, filename):
@@ -93,40 +92,33 @@ class potentiometer_calibration:
         offsets = []
         average_offsets = []
 
-        # Looking in XML assuming following tree structure
-        # config > Robot> Actuator > AnalogIn > VoltsToPosSI > Scale = ____   or   Offset = ____
-        xmlVoltsToPosSI = {}
+        # Looking in configuration file assuming following tree structure
+        # config > robots[0] > actuators > potentiometer > voltage_to_position > scale = ____   or   offset = ____
+        config_voltage_to_position = {}
 
         # Make sure file exists
         if not os.path.exists(filename):
-            print('Config file "{}" not found'.format(filename))
+            print(f'Config file "{filename}" not found')
             return
 
-        tree = ET.parse(filename)
-        root = tree.getroot()
-
-        # Find Robot in config file and make sure name matches
-        xpath_search_results = root.findall('./Robot')
-        if len(xpath_search_results) == 1:
-            xmlRobot = xpath_search_results[0]
-        else:
-            print('Can\'t find "Robot" in configuration file')
-            return
-
-        if xmlRobot.get('Name') == self.ros_namespace:
-            self.serial_number = xmlRobot.get('SN')
-            print('Successfully found robot "{}", serial number {} in XML file'.format(self.ros_namespace, self.serial_number))
+        file = open(filename)
+        data = json.load(file)
+        file.close()
+        robot = data['robots'][0]
+        robot_name = robot['name']
+        if robot_name == self.ros_namespace:
+            self.serial_number = robot['serial_number']
+            print(f'Successfully found robot "{self.ros_namespace}", serial number {self.serial_number} in configuration file')
             robotFound = True
         else:
-            print('Found robot "{}" while looking for "{}", make sure you\'re using the correct configuration file!'.format(xmlRobot.get('Name'), self.ros_namespace))
+            print(f'Found robot "{robot_name}" while looking for "{self.ros_namespace}", make sure you\'re using the correct configuration file!')
             return
 
-        # Look for all actuators/VoltsToPosSI
-        xpath_search_results = root.findall('./Robot/Actuator')
-        for actuator in xpath_search_results:
-            actuatorId = int(actuator.get('ActuatorID'))
-            voltsToPosSI = actuator.find('./AnalogIn/VoltsToPosSI')
-            xmlVoltsToPosSI[actuatorId] = voltsToPosSI
+        # Look for all actuators/_voltage_to_position
+        for actuator in robot['actuators']:
+            actuatorId = int(actuator['actuator_id'])
+            voltage_to_position = actuator['potentiometer']['voltage_to_position']
+            config_voltage_to_position[actuatorId] = voltage_to_position
 
         # set joint limits and number of axis based on arm type, using robot name
         if ('').join(list(self.ros_namespace)[:-1]) == 'PSM': #checks to see if the robot being tested is a PSM
@@ -174,7 +166,7 @@ class potentiometer_calibration:
             return
 
 
-        print('The serial number found in the XML file is: {}'.format(self.serial_number))
+        print('The serial number found in the configuration file is: {}'.format(self.serial_number))
         print('Make sure the dvrk_system node is using the same configuration file.  Serial number can be found in GUI tab "IO".')
         ok = input('Press "c" and [enter] to continue\n')
         if ok != 'c':
@@ -208,7 +200,7 @@ class potentiometer_calibration:
                 input('Since you are calibrating a PSM, make sure there is no instrument inserted.  Please remove instrument, sterile adapter or calibration plate if any and press [enter]\n')
             if arm_type == 'ECM':
                 input('Since you are calibrating an ECM, remove the endoscope and press [enter]\n')
-            input('The robot will make LARGE MOVEMENTS, please hit [enter] to continue once it is safe to proceed\n')
+            input('The robot will make LARGE MOVEMENTS, press [enter] to continue once it is safe to proceed\n')
 
             for position in range(nb_joint_positions):
                 # create joint goal
@@ -276,7 +268,7 @@ class potentiometer_calibration:
             for sample in range(nb_samples):
                 last_pot, _ = self.potentiometers.measured_jp()
                 for axis in range(nb_axis):
-                    average_offsets[axis].append(last_pot[axis] * r2d)
+                    average_offsets[axis].append(last_pot[axis])
                 writer.writerow(last_pot)
                 time.sleep(sleep_time_between_samples)
                 sys.stdout.write('\rProgress %02.1f%%' % (float(sample) / float(nb_samples) * 100.0))
@@ -291,7 +283,7 @@ class potentiometer_calibration:
             print('index | old scale  | new scale  | correction')
             for index in range(nb_axis):
                 # find existing values
-                oldScale = float(xmlVoltsToPosSI[index].get('Scale'))
+                oldScale = config_voltage_to_position[index]['scale']
                 # compute new values
                 correction = slope(encoders[index], potentiometers[index])
                 newScale = oldScale / correction
@@ -299,7 +291,7 @@ class potentiometer_calibration:
                 # display
                 print(' %d    | % 04.6f | % 04.6f | % 04.6f' % (index, oldScale, newScale, correction))
                 # replace values
-                xmlVoltsToPosSI[index].set('Scale', str(newScale))
+                config_voltage_to_position[index]['scale'] = newScale
 
         if calibration_type == 'offsets':
             # convert offsets to joint space
@@ -316,15 +308,15 @@ class potentiometer_calibration:
                 offsets = response.output
 
             newOffsets = []
-            print('index | old offset  | new offset | correction')
-            for index in range(nb_axis):
+            print('axis | old offset  | new offset | correction')
+            for axis in range(nb_axis):
                 # find existing values
-                oldOffset = float(xmlVoltsToPosSI[index].get('Offset'))
+                oldOffset = config_voltage_to_position[axis]['offset']
                 # compute new values
-                newOffsets.append(oldOffset - offsets[index])
+                newOffsets.append(oldOffset - offsets[axis])
 
                 # display
-                print(' %d    | % 04.6f | % 04.6f | % 04.6f ' % (index, oldOffset, newOffsets[index], offsets[index]))
+                print(' %d    | % 04.6f | % 04.6f | % 04.6f ' % (axis, oldOffset, newOffsets[axis], offsets[axis]))
 
             if arm_type == 'PSM':
                 all = input('Do you want to save all joint offsets or just the last 4, press "a" followed by [enter] to save all\n');
@@ -332,21 +324,22 @@ class potentiometer_calibration:
                     print('This program will save ALL new PSM offsets')
                     for axis in range(nb_axis):
                         # replace values
-                        xmlVoltsToPosSI[axis].set('Offset', str(newOffsets[axis]))
+                        config_voltage_to_position[axis]['offset'] = newOffsets[axis]
                 else:
                     print('This program will only save the last 4 PSM offsets')
                     for axis in range(3, nb_axis):
                         # replace values
-                        xmlVoltsToPosSI[axis].set('Offset', str(newOffsets[axis]))
+                        config_voltage_to_position[axis]['offset'] = newOffsets[axis]
             else:
                 for axis in range(nb_axis):
                     # replace values
-                    xmlVoltsToPosSI[axis].set('Offset', str(newOffsets[axis]))
+                    config_voltage_to_position[axis]['offset'] = newOffsets[axis]
 
         save = input('To save this, press "y" followed by [enter]\n')
         if save == 'y':
             os.rename(filename, filename + '-backup')
-            tree.write(filename)
+            with open(filename, 'w') as json_file:
+                json.dump(data, json_file, indent=4)
             print('Results saved in {}. Restart your dVRK application to use the new file!'.format(filename))
             print('Old file saved as {}-backup.'.format(filename))
         else:
@@ -365,10 +358,12 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['ECM', 'MTML', 'MTMR', 'PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
+    parser.add_argument('-i', '--IO-name', type=str, required=True,
+                        help = 'name of IO component in system configuration file')
     parser.add_argument('-c', '--config', type=str, required=True,
-                        help = 'arm IO config file, i.e. something like sawRobotIO1394-xwz-12345.xml')
+                        help = 'arm IO config file, i.e. something like sawRobotIO1394-xwz-12345.json')
     args = parser.parse_args(argv)
 
     ral = crtk.ral('dvrk_calibrate_potentiometers')
-    application = potentiometer_calibration(ral, args.arm)
+    application = potentiometer_calibration(ral, args.arm, args.IO_name)
     ral.spin_and_execute(application.run, args.type, args.config)
