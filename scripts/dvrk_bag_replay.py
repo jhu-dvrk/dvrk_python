@@ -14,17 +14,17 @@
 # --- end cisst license ---
 
 # First collect a bag of data using rosbag while the robot is moving:
-# > rosbag record /PSM1/setpoint_cp /PSM1/setpoint_cv /PSM1/setpoint_js /PSM1/jaw/setpoint_js
+# > ros2 bag record /PSM1/setpoint_cp /PSM1/setpoint_cv /PSM1/setpoint_js /PSM1/jaw/setpoint_js
 # Hit ctrl+c to stop rosbag recording
 
 # Then start a single arm using:
-# > rosrun dvrk_robot dvrk_system -j <system-file>
+# > ros2 run dvrk_robot dvrk_system -j <system-file>
 
 # After that, you can replay the trajectory using:
-# > rosrun dvrk_python dvrk_bag_replay.py -a PSM1 -b /home/anton/2021-06-24-10-55-04.bag -m servo_cp
+# > ros2 run dvrk_python dvrk_bag_replay.py -a PSM1 -b /path-to-bag -m servo_cp
 
 # If you have a PSM and want to also replay the jaw motion, use -j
-# > rosrun dvrk_python dvrk_bag_replay.py -a PSM1 -b /home/anton/2021-06-24-10-55-04.bag -m servo_cp -j
+# > ros2 run dvrk_python dvrk_bag_replay.py -a PSM1 -b /path-to-bag -m servo_cp -j
 
 import crtk
 import sys
@@ -328,6 +328,7 @@ for index in range(total):
     if sleep_time > 0:
         time.sleep(sleep_time)
 
+ral.shutdown()
 
 print('\n--> Time to replay trajectory: %f seconds' % (time.time() - start_time))
 print('--> Done!')
