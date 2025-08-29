@@ -30,9 +30,9 @@ import tty
 import termios
 import numpy
 import argparse
+import json
 
 import os.path
-import xml.etree.ElementTree as ET
 
 # for keyboard capture
 def is_there_a_key_press():
@@ -43,31 +43,25 @@ class calibration_psm:
 
     # configuration
     def __init__(self, ral, arm_name, config_file, period):
+        self.arm_name = arm_name
         self.config_file = config_file
         self.rate = ral.create_rate(1.0 / period)
         # check that the config file is good
         if not os.path.exists(self.config_file):
             sys.exit('Config file "{:s}" not found'.format(self.config_file))
 
-        # XML parsing, find current offset
-        self.tree = ET.parse(config_file)
-        root = self.tree.getroot()
-
-        # find Robot in config file and make sure name matches
-        xpath_search_results = root.findall('./Robot')
-        if len(xpath_search_results) == 1:
-            xmlRobot = xpath_search_results[0]
+        file = open(config_file)
+        self.data = json.load(file)
+        file.close()
+        robot = self.data['robots'][0]
+        robot_name = robot['name']
+        if robot_name == self.arm_name:
+            self.serial_number = robot['serial_number']
+            print(f'Successfully found robot "{self.arm_name}", serial number {self.serial_number} in configuration file')
         else:
-            sys.exit('Can\'t find "Robot" in configuration file {:s}'.format(self.config_file))
+            sys.exit(f'Found robot "{robot_name}" while looking for "{self.arm_name}", make sure you\'re using the correct configuration file!')
 
-        if xmlRobot.get('Name') == arm_name:
-            serial_number = xmlRobot.get('SN')
-            print('Successfully found robot "{:s}", serial number {:s} in XML file'.format(arm_name, serial_number))
-            robotFound = True
-        else:
-            sys.exit('Found robot "{:s}" while looking for "{:s}", make sure you\'re using the correct configuration file!'.format(xmlRobot.get('Name'), arm_name))
-
-        hardware_version = xmlRobot.get('HardwareVersion')
+        hardware_version = self.data['robots'][0]['hardware_version']
         self.analog_potentiometers = True
         if hardware_version in ['QLA1', 'DQLA']:
             print('Calibrating analog potentiometers on PSM Classic')
@@ -79,9 +73,7 @@ class calibration_psm:
 
         # now find the offset for joint 2, we assume there's only one result
         if self.analog_potentiometers:
-            xpath_search_results = root.findall("./Robot/Actuator[@ActuatorID='2']/AnalogIn/VoltsToPosSI")
-            self.xmlPot = xpath_search_results[0]
-            print('Potentiometer offset for joint 2 is currently: {:s}'.format(self.xmlPot.get('Offset')))
+            print(f'Potentiometer offset for joint 2 is currently: {self.data["robots"][0]["actuators"][2]["potentiometer"]["voltage_to_position"]["offset"]}')
 
         self.arm = dvrk.psm(ral = ral,
                             arm_name = arm_name)
@@ -204,12 +196,14 @@ class calibration_psm:
 
         # now save the new offset
         if self.analog_potentiometers:
-            oldOffset = float(self.xmlPot.get('Offset')) / 1000.0 # convert from XML (mm) to m
-            newOffset = oldOffset - correction                    # add in meters
-            self.xmlPot.set('Offset', str(newOffset * 1000.0))    # convert from m to XML (mm)
-            os.rename(self.config_file, self.config_file + '-backup')
-            self.tree.write(self.config_file)
+            oldOffset = self.data["robots"][0]["actuators"][2]["potentiometer"]["voltage_to_position"]["offset"]
+            newOffset = oldOffset - correction
+            self.data["robots"][0]["actuators"][2]["potentiometer"]["voltage_to_position"]["offset"] = newOffset
             print('Old offset: {:2.2f}mm\nNew offset: {:2.2f}mm\n'.format(oldOffset * 1000.0, newOffset * 1000.0))
+
+            os.rename(self.config_file, self.config_file + '-backup')
+            with open(self.config_file, 'w') as json_file:
+                json.dump(self.data, json_file, indent=4)
             print('Results saved in {}. Restart your dVRK application to use the new file!'.format(self.config_file))
             print('Old file saved as {}-backup.'.format(self.config_file))
         else:
@@ -230,13 +224,13 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['PSM1', 'PSM2', 'PSM3'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
-    parser.add_argument('-p', '--period', type =float, default = 0.01,
-                        help = 'period used for loops using servo commands')
     parser.add_argument('-c', '--config', type=str, required=True,
-                        help = 'arm IO config file, i.e. something like sawRobotIO1394-xwz-12345.xml')
+                        help = 'arm IO config file, i.e. something like sawRobotIO1394-PSMx-xxxxxx.json')
     parser.add_argument('-s', '--swing-joint', type=int, required=False,
                         choices=[0, 1], default=0,
                         help = 'joint use for the swing motion around RCM')
+    parser.add_argument('-p', '--period', type =float, default = 0.01,
+                        help = 'period used for loops using servo commands')
     args = parser.parse_args(argv)
 
     print ('\nThis program can be used to improve the potentiometer offset for the third joint '
