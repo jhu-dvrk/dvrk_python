@@ -99,9 +99,14 @@ class example_application:
         goal_v = numpy.zeros(goal_p.size)
         start = time.time()
 
+        max_age = 0.0
+        max_delta_t_between_subscribers = 0.0
+        nb_samples = 0
+        
         sleep_rate = self.ral.create_rate(1.0 / self.period)
         print('  servo_jp expected duration: %2.5f seconds' % (duration))
         for i in range(int(samples)):
+            n = self.ral.to_sec(self.ral.now())
             angle = i * math.radians(360.0) / samples
             # position
             goal_p[0] = initial_joint_position[0] + amplitude * (1.0 - math.cos(angle))
@@ -113,14 +118,29 @@ class example_application:
             # get some data just to make sure the server is still
             # running, this will raise a timeout exception if the dVRK
             # died.  We also check timestamp to make sure it's valid
-            _, ts = self.arm.measured_jp()
-            if ts == 0:
+            # and compute some basic time stats
+            nb_samples += 1
+            _, ts_m = self.arm.measured_jp()
+            _, ts_s = self.arm.setpoint_jp()
+            if ts_m == 0:
                 print('  ! received invalid data, maybe the arm is not ready anymore?')
                 self.ral.shutdown()
+            d = abs(ts_m - ts_s)
+            if d > max_delta_t_between_subscribers:
+                max_delta_t_between_subscribers = d
+            a = abs(n - ts_m)
+            if a > max_age:
+                max_age = a
+            a = abs(n - ts_s)
+            if a > max_age:
+                max_age = a
             sleep_rate.sleep()
 
         actual_duration = time.time() - start
         print('< servo_jp complete in %2.5f seconds' % (actual_duration))
+        print(f'  - number of iterations: {nb_samples}') 
+        print('  - maximum age of data received (ms): %2.5f' % (max_age * 1000))
+        print('  - maximum dt between received topics (ms): %2.5f' % (max_delta_t_between_subscribers * 1000))  
 
     # goal joint control example
     def run_move_jp(self):
