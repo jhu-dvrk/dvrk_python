@@ -175,7 +175,7 @@ else:
 
     storage_options = rosbag2_py.StorageOptions(
         uri = args.bag,
-        storage_id = 'sqlite3')
+        storage_id = 'mcap')
     converter_options = rosbag2_py.ConverterOptions(
         input_serialization_format = 'cdr',
         output_serialization_format = 'cdr')
