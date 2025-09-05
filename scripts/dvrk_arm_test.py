@@ -167,7 +167,9 @@ class example_application:
     # utility to position tool/camera deep enough before cartesian examples
     def prepare_cartesian(self):
         # make sure the camera is past the cannula and tool vertical
-        jp, ts = self.arm.setpoint_jp()
+        ts = 0.0;
+        while ts == 0.0:
+            jp, ts = self.arm.setpoint_jp()
         goal = numpy.copy(jp)
         if ((self.arm_name.endswith('PSM1')) or (self.arm_name.endswith('PSM2'))
             or (self.arm_name.endswith('PSM3')) or (self.arm_name.endswith('ECM'))):
