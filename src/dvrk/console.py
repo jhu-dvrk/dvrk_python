@@ -28,6 +28,7 @@ class console(object):
         # data members, event based
         self.__ral = ral.create_child(console_name)
         self.__teleop_scale = 0.0
+        self.__teleop_selected = {}
 
         # publishers
         self.__teleop_enable_pub = self.__ral.publisher('/teleop/enable',
@@ -36,18 +37,35 @@ class console(object):
         self.__teleop_set_scale_pub = self.__ral.publisher('/teleop/set_scale',
                                                            std_msgs.msg.Float64,
                                                            latch = False, queue_size = 1)
+        self.__teleop_select_pub = self.__ral.publisher('/teleop/select',
+                                                        std_msgs.msg.String,
+                                                        latch = False, queue_size = 1)
+        self.__teleop_unselect_pub = self.__ral.publisher('/teleop/unselect',
+                                                          std_msgs.msg.String,
+                                                          latch = False, queue_size = 1)
 
         # subscribers
         self.__teleop_scale_sub = self.__ral.subscriber('/teleop/scale',
                                                         std_msgs.msg.Float64,
                                                         self.__teleop_scale_cb,
                                                         latch = True)
+        self.__teleop_selected_sub = self.__ral.subscriber('/teleop/selected',
+                                                           std_msgs.msg.String,
+                                                           self.__teleop_selected_cb,
+                                                           latch = True)
+        self.__teleop_unselected_sub = self.__ral.subscriber('/teleop/unselected',
+                                                             std_msgs.msg.String,
+                                                             self.__teleop_unselected_cb,
+                                                             latch = True)
 
     def __teleop_scale_cb(self, data):
-        """Callback for teleop scale.
-
-        :param data: the latest scale requested for the dVRK console"""
         self.__teleop_scale = data.data
+
+    def __teleop_selected_cb(self, data):
+        self.__teleop_selected[data.data] = True
+
+    def __teleop_unselected_cb(self, data):
+        self.__teleop_selected[data.data] = False
 
     def teleop_start(self):
         msg = std_msgs.msg.Bool()
@@ -66,3 +84,16 @@ class console(object):
 
     def teleop_get_scale(self):
         return self.__teleop_scale
+
+    def teleop_select(self, teleop_name):
+        msg = std_msgs.msg.String()
+        msg.data = teleop_name
+        self.__teleop_select_pub.publish(msg)
+
+    def teleop_unselect(self, teleop_name):
+        msg = std_msgs.msg.String()
+        msg.data = teleop_name
+        self.__teleop_unselect_pub.publish(msg)
+
+    def teleop_is_selected(self, teleop_name):
+        return self.__teleop_selected.get(teleop_name, False)
