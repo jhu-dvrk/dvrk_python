@@ -99,7 +99,7 @@ class calibration_psm_cv:
         self.arm.move_jp(goal).wait()
         self.arm.jaw.move_jp(numpy.array([0.0])).wait()
         # identify depth for tool j5 using forward kinematics
-        cp = self.arm.forward_kinematics(numpy.array([0.0, 0.0, 0.0, 0.0]))
+        cp = self.arm.local.forward_kinematics(numpy.array([0.0, 0.0, 0.0, 0.0]))
         self.q2 = cp.p.z()
         print('Depth required to position O5 on RCM point: {0:4.2f}mm'.format(self.q2 * 1000.0))
 
