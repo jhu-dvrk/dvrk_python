@@ -1,6 +1,24 @@
 Change log
 ==========
 
+2.4.0 (2025-12-18)
+==================
+
+* API changes:
+  * New CRTK convention, data is always published, but timestamp is set to zero if data is invalid.  All methods to retrieve data now return data, timestamp tuple.
+  * Bumped CMake minimum required to 3.16
+* Deprecated features:
+  * All methods returning data have a new signature.
+* New features:
+  * New classes dvrk.system and dvrk.console
+  * Added simple time stats to dvrk_arm_test.py
+  * Update dvrk_teleoperation.py for ROS 2
+* Bug fixes:
+  * Ported all scripts to new CRTK signature (return data, ts)
+  * Fixed potentiometer calibration scripts for insertion, should always use local.forward_kinematics
+  * dvrk_bag_replay.py: bag storage now hardcoded to mcap for Jazzy, was sqlite3 before
+
+
 2.3.0 (2024-08-31)
 ==================
 

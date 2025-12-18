@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.16)
-project (dvrk_python VERSION 2.3.0)
+project (dvrk_python VERSION 2.4.0)
 
 # first test for ROS1
 find_package (catkin QUIET
