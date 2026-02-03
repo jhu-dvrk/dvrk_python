@@ -26,12 +26,12 @@ import sys
 
 
 class example_application:
-    def __init__(self, ral, arm_name):
+    def __init__(self, ral, arm_name, footpedal_topic='footpedals/coag'):
         print('> configuring dvrk_mtm_test for {}'.format(arm_name))
         self.ral = ral
         self.arm = dvrk.mtm(ral = ral,
                             arm_name = arm_name)
-        self.coag = crtk.joystick_button(ral, 'footpedals/coag', 0)
+        self.coag = crtk.joystick_button(ral, footpedal_topic, 0)
 
     # homing example
     def home(self):
@@ -108,9 +108,11 @@ def main():
     parser.add_argument('-a', '--arm', type=str, required=True,
                         choices=['MTML', 'MTMR'],
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
+    parser.add_argument('-p', '--pedal', type=str, default='footpedals/coag',
+                        help = 'footpedal topic name (default: /IO/IO1/coag)')
     args = parser.parse_args(argv)
 
-    application = example_application(ral, args.arm)
+    application = example_application(ral, args.arm, args.pedal)
     ral.spin_and_execute(application.run)
 
 if __name__ == '__main__':
