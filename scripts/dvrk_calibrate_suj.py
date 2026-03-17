@@ -90,21 +90,21 @@ class main_widget(QWidget):
         self.all_voltages = {}
         for a in self.arm_list:
             for p in self.pot_list:
-                self.all_voltages[a + '-' + p] = voltage(a, p,
+                self.all_voltages[a + '_' + p] = voltage(a, p,
                                                           eval('self.SUJ.' + a + '.' + p + '_voltage.measured_jp'),
                                                           self.nb_joints[a])
 
         # initialize mechanical limits for SI SUJ
         torad = math.pi / 180.0
         self.joint_limits = {}
-        self.joint_limits['ECM-minimum']  = numpy.array([0.0,   -100.0 * torad, -157.0 * torad, -106.0 * torad])
-        self.joint_limits['ECM-maximum']  = numpy.array([0.4826, 100.0 * torad,  157.0 * torad,  106.0 * torad])
-        self.joint_limits['PSM1-minimum'] = numpy.array([0.0,    -95.0 * torad, -163.0 * torad,  -99.5 * torad])
-        self.joint_limits['PSM1-maximum'] = numpy.array([0.4826,  95.0 * torad,    3.0 * torad,   95.0 * torad])
-        self.joint_limits['PSM2-minimum'] = numpy.array([0.0,    -95.0 * torad,   -3.0 * torad,  -95.0 * torad])
-        self.joint_limits['PSM2-maximum'] = numpy.array([0.4826,  95.0 * torad,  163.0 * torad,   99.5 * torad])
-        self.joint_limits['PSM3-minimum'] = numpy.array([0.0,    -97.5 * torad, -154.5 * torad, -135.0 * torad, -30.0 * torad])
-        self.joint_limits['PSM3-maximum'] = numpy.array([0.5842,  97.5 * torad,   82.0 * torad,  152.5 * torad,  95.0 * torad])
+        self.joint_limits['ECM_minimum']  = numpy.array([0.0,   -100.0 * torad, -157.0 * torad, -106.0 * torad])
+        self.joint_limits['ECM_maximum']  = numpy.array([0.4826, 100.0 * torad,  157.0 * torad,  106.0 * torad])
+        self.joint_limits['PSM1_minimum'] = numpy.array([0.0,    -95.0 * torad, -163.0 * torad,  -99.5 * torad])
+        self.joint_limits['PSM1_maximum'] = numpy.array([0.4826,  95.0 * torad,    3.0 * torad,   95.0 * torad])
+        self.joint_limits['PSM2_minimum'] = numpy.array([0.0,    -95.0 * torad,   -3.0 * torad,  -95.0 * torad])
+        self.joint_limits['PSM2_maximum'] = numpy.array([0.4826,  95.0 * torad,  163.0 * torad,   99.5 * torad])
+        self.joint_limits['PSM3_minimum'] = numpy.array([0.0,    -97.5 * torad, -154.5 * torad, -135.0 * torad, -30.0 * torad])
+        self.joint_limits['PSM3_maximum'] = numpy.array([0.5842,  97.5 * torad,   82.0 * torad,  152.5 * torad,  95.0 * torad])
         self.pot_directions = {}
         self.pot_directions['ECM']  = numpy.array([-1.0,  1.0,  1.0,  1.0])
         self.pot_directions['PSM1'] = numpy.array([-1.0,  1.0,  1.0, -1.0])
@@ -166,10 +166,10 @@ class main_widget(QWidget):
                 self.all_scales[a + p] = numpy.zeros(self.nb_joints[a])
                 self.all_offsets[a + p] = numpy.zeros(self.nb_joints[a])
                 for j in range(self.nb_joints[a]):
-                    j_min = self.joint_limits[a + '-minimum'][j]
-                    j_max = self.joint_limits[a + '-maximum'][j]
-                    v_min = self.all_voltages[a + '-' + p].minimum[j]
-                    v_max = self.all_voltages[a + '-' + p].maximum[j]
+                    j_min = self.joint_limits[a + '_minimum'][j]
+                    j_max = self.joint_limits[a + '_maximum'][j]
+                    v_min = self.all_voltages[a + '_' + p].minimum[j]
+                    v_max = self.all_voltages[a + '_' + p].maximum[j]
                     if self.pot_directions[a][j] > 0:
                         s = ((j_max - j_min) / (v_max - v_min))
                         o = j_min - (s * v_min)
@@ -178,8 +178,8 @@ class main_widget(QWidget):
                         o = j_max - (s * v_min)
                     self.all_scales[a + p][j] = s
                     self.all_offsets[a + p][j] = o
-                print(f'"{p}-offsets": {self.all_offsets[a + p].tolist()},')
-                print(f'"{p}-scales": {self.all_scales[a + p].tolist()},')
+                print(f'"{p}_offsets": {self.all_offsets[a + p].tolist()},')
+                print(f'"{p}_scales": {self.all_scales[a + p].tolist()},')
 
     def quit_cb(self):
         msg = QMessageBox()
