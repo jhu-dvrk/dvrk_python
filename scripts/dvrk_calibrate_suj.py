@@ -111,6 +111,22 @@ class main_widget(QWidget):
         self.pot_directions['PSM2'] = numpy.array([-1.0,  1.0,  1.0, -1.0])
         self.pot_directions['PSM3'] = numpy.array([-1.0,  1.0, -1.0,  1.0, -1.0])
 
+        # Locate sawRobotIO1394 configuration files in the current directory
+        import glob
+        self.config_files = {}
+        for filename in glob.glob('sawRobotIO1394-SUJ-Si-*.json'):
+            parts = filename.replace('.json', '').split('-')
+            if len(parts) >= 5:
+                arm = parts[4]
+                self.config_files[arm] = filename
+        
+        if self.config_files:
+            print("Found sawRobotIO1394 SUJ-Si configuration files:")
+            for arm, filename in self.config_files.items():
+                print(f"  {arm}: {filename}")
+        else:
+            print("Warning: No sawRobotIO1394-SUJ-Si-*.json files found in the current directory.")
+
         # GUI
         self.setWindowTitle('dVRK SUJ Calibration')
         self.mainLayout = QVBoxLayout()
@@ -133,9 +149,19 @@ class main_widget(QWidget):
         self.mainLayout.addWidget(self.showButton)
         self.showButton.clicked.connect(self.show_cb)
 
-        self.showButton = QPushButton('Quit')
-        self.mainLayout.addWidget(self.showButton)
-        self.showButton.clicked.connect(self.quit_cb)
+        # GUI buttons for saving per arm
+        self.save_buttons = {}
+        for a in self.arm_list:
+            btn = QPushButton(f'Save {a}')
+            self.mainLayout.addWidget(btn)
+            btn.clicked.connect(lambda checked, arm=a: self.save_arm_cb(arm))
+            if a not in self.config_files:
+                btn.setEnabled(False)
+            self.save_buttons[a] = btn
+
+        self.quitButton = QPushButton('Quit')
+        self.mainLayout.addWidget(self.quitButton)
+        self.quitButton.clicked.connect(self.quit_cb)
 
         # timer
         self.timer = QTimer()
@@ -170,6 +196,8 @@ class main_widget(QWidget):
                     j_max = self.joint_limits[a + '_maximum'][j]
                     v_min = self.all_voltages[a + '_' + p].minimum[j]
                     v_max = self.all_voltages[a + '_' + p].maximum[j]
+                    if math.isinf(v_min) or math.isinf(v_max) or v_max == v_min:
+                        continue
                     if self.pot_directions[a][j] > 0:
                         s = ((j_max - j_min) / (v_max - v_min))
                         o = j_min - (s * v_min)
@@ -180,6 +208,86 @@ class main_widget(QWidget):
                     self.all_offsets[a + p][j] = o
                 print(f'"{p}_offsets": {self.all_offsets[a + p].tolist()},')
                 print(f'"{p}_scales": {self.all_scales[a + p].tolist()},')
+
+    def calculate_calibration_for_arm(self, a):
+        scales = {}
+        offsets = {}
+        for p in self.pot_list:
+            scales[p] = numpy.zeros(self.nb_joints[a])
+            offsets[p] = numpy.zeros(self.nb_joints[a])
+            for j in range(self.nb_joints[a]):
+                j_min = self.joint_limits[a + '_minimum'][j]
+                j_max = self.joint_limits[a + '_maximum'][j]
+                v_min = self.all_voltages[a + '_' + p].minimum[j]
+                v_max = self.all_voltages[a + '_' + p].maximum[j]
+                if math.isinf(v_min) or math.isinf(v_max) or v_max == v_min:
+                    return None, None
+                if self.pot_directions[a][j] > 0:
+                    s = ((j_max - j_min) / (v_max - v_min))
+                    o = j_min - (s * v_min)
+                else:
+                    s = ((j_min - j_max) / (v_max - v_min))
+                    o = j_max - (s * v_min)
+                scales[p][j] = s
+                offsets[p][j] = o
+        return scales, offsets
+
+    def save_arm_cb(self, arm):
+        if arm not in self.config_files:
+            QMessageBox.warning(self, "No Config File", f"No sawRobotIO1394-SUJ-Si-{arm}-*.json file found in the current directory.")
+            return
+
+        scales, offsets = self.calculate_calibration_for_arm(arm)
+        if scales is None:
+            QMessageBox.warning(self, "No Calibration Data", f"No valid calibration data available for {arm}. Please move the joints to register min/max voltage values first.")
+            return
+
+        filename = self.config_files[arm]
+        reply = QMessageBox.question(self, "Save Calibration",
+                                     f"Save calibration for {arm} to {filename}?\n\nThis will backup the existing file and overwrite it with new calibration offsets/scales.",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            import os
+            import json
+
+            # Load existing data
+            try:
+                with open(filename, 'r') as f:
+                    data = json.load(f)
+            except Exception as e:
+                QMessageBox.critical(self, "Error Reading File", f"Failed to read {filename}:\n{e}")
+                return
+
+            # Create backup name matching the format used in generator script
+            backup = filename + datetime.datetime.now().strftime("-backup-%Y-%m-%d_%H:%M:%S")
+            try:
+                os.rename(filename, backup)
+                print(f"Renamed {filename} to backup: {backup}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error Backing Up", f"Failed to backup {filename}:\n{e}")
+                return
+
+            # Update data
+            data['primary_measured_js'] = [
+                {"scale": float(scales['primary'][j]), "offset": float(offsets['primary'][j])}
+                for j in range(self.nb_joints[arm])
+            ]
+            data['secondary_measured_js'] = [
+                {"scale": float(scales['secondary'][j]), "offset": float(offsets['secondary'][j])}
+                for j in range(self.nb_joints[arm])
+            ]
+
+            # Write data back
+            try:
+                with open(filename, 'w') as f:
+                    json.dump(data, f, indent=4)
+                print(f"Saved new calibration to {filename}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error Writing File", f"Failed to write {filename}:\n{e}")
+                return
+
+            QMessageBox.information(self, "Saved", f"Calibration saved successfully for {arm}.")
 
     def quit_cb(self):
         msg = QMessageBox()
