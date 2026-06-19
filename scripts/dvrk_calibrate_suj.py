@@ -117,7 +117,7 @@ class main_widget(QWidget):
         for filename in glob.glob('sawRobotIO1394-SUJ-Si-*.json'):
             parts = filename.replace('.json', '').split('-')
             if len(parts) >= 5:
-                arm = parts[4]
+                arm = parts[3]
                 self.config_files[arm] = filename
         
         if self.config_files:
@@ -145,10 +145,6 @@ class main_widget(QWidget):
                 self.table.setItem(counter, 2 + i, newItem)
             counter += 1
 
-        self.showButton = QPushButton('Show')
-        self.mainLayout.addWidget(self.showButton)
-        self.showButton.clicked.connect(self.show_cb)
-
         # GUI buttons for saving per arm
         self.save_buttons = {}
         for a in self.arm_list:
@@ -158,6 +154,10 @@ class main_widget(QWidget):
             if a not in self.config_files:
                 btn.setEnabled(False)
             self.save_buttons[a] = btn
+
+        self.resetPSM3Button = QPushButton("Reset PSM3 joint 5")
+        self.mainLayout.addWidget(self.resetPSM3Button)
+        self.resetPSM3Button.clicked.connect(self.reset_psm3_joint4_cb)
 
         self.quitButton = QPushButton('Quit')
         self.mainLayout.addWidget(self.quitButton)
@@ -171,43 +171,20 @@ class main_widget(QWidget):
     def timer_cb(self):
         counter = 0
         for v in self.all_voltages.values():
-            jp, _ = v.measured_jp()
-            v.minimum = numpy.minimum(v.minimum, jp)
-            v.maximum = numpy.maximum(v.maximum, jp)
-            for i in range(v.nb_joints):
-                item = self.table.item(counter, 2 + i)
-                item.setText(f'[{v.minimum[i]}, {v.maximum[i]}] -> {v.maximum[i] - v.minimum[i]}')
+            try:
+                jp, _ = v.measured_jp()
+                v.minimum = numpy.minimum(v.minimum, jp)
+                v.maximum = numpy.maximum(v.maximum, jp)
+                for i in range(v.nb_joints):
+                    item = self.table.item(counter, 2 + i)
+                    item.setText(f'[{v.minimum[i]}, {v.maximum[i]}] -> {v.maximum[i] - v.minimum[i]}')
+            except Exception:
+                pass
             counter += 1
         self.table.resizeColumnsToContents()
 
 
-    def show_cb(self):
-        self.all_offsets = {}
-        self.all_scales = {}
-        now = datetime.datetime.now()
-        print(f'-- at {now.hour}:{now.minute}:{now.second} ---')
-        for a in self.arm_list:
-            print(f'--- {a} ----')
-            for p in self.pot_list:
-                self.all_scales[a + p] = numpy.zeros(self.nb_joints[a])
-                self.all_offsets[a + p] = numpy.zeros(self.nb_joints[a])
-                for j in range(self.nb_joints[a]):
-                    j_min = self.joint_limits[a + '_minimum'][j]
-                    j_max = self.joint_limits[a + '_maximum'][j]
-                    v_min = self.all_voltages[a + '_' + p].minimum[j]
-                    v_max = self.all_voltages[a + '_' + p].maximum[j]
-                    if math.isinf(v_min) or math.isinf(v_max) or v_max == v_min:
-                        continue
-                    if self.pot_directions[a][j] > 0:
-                        s = ((j_max - j_min) / (v_max - v_min))
-                        o = j_min - (s * v_min)
-                    else:
-                        s = ((j_min - j_max) / (v_max - v_min))
-                        o = j_max - (s * v_min)
-                    self.all_scales[a + p][j] = s
-                    self.all_offsets[a + p][j] = o
-                print(f'"{p}_offsets": {self.all_offsets[a + p].tolist()},')
-                print(f'"{p}_scales": {self.all_scales[a + p].tolist()},')
+
 
     def calculate_calibration_for_arm(self, a):
         scales = {}
@@ -236,6 +213,8 @@ class main_widget(QWidget):
         if arm not in self.config_files:
             QMessageBox.warning(self, "No Config File", f"No sawRobotIO1394-SUJ-Si-{arm}-*.json file found in the current directory.")
             return
+
+
 
         scales, offsets = self.calculate_calibration_for_arm(arm)
         if scales is None:
@@ -288,6 +267,16 @@ class main_widget(QWidget):
                 return
 
             QMessageBox.information(self, "Saved", f"Calibration saved successfully for {arm}.")
+
+    def reset_psm3_joint4_cb(self):
+        for p in self.pot_list:
+            v = self.all_voltages['PSM3_' + p]
+            try:
+                jp, _ = v.measured_jp()
+                v.minimum[4] = jp[4]
+                v.maximum[4] = jp[4]
+            except Exception:
+                pass
 
     def quit_cb(self):
         msg = QMessageBox()
