@@ -1,6 +1,15 @@
 Change log
 ==========
 
+2.5.0 (TBD)
+===========
+
+* New features:
+  * Added an option to select the pedal topic in `dvrk_mtm_test.py`.
+  * Added support for native Si SUJ ESSJ in calibration tooling.
+* Bug fixes:
+  * Fixed SUJ calibration output handling.
+
 2.4.0 (2026-01-07)
 ==================
 
