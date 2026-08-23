@@ -1,8 +1,8 @@
 Change log
 ==========
 
-2.5.0 (TBD)
-===========
+2.5.0 (2026-08-22)
+==================
 
 * New features:
   * Added an option to select the pedal topic in `dvrk_mtm_test.py`.
