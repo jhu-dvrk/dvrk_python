@@ -101,7 +101,6 @@ class example_application:
 
 def main():
     argv = crtk.ral.parse_argv(sys.argv[1:]) # skip argv[0], script name
-    ral = crtk.ral('dvrk_mtm_test')
 
     # parse arguments
     parser = argparse.ArgumentParser()
@@ -112,6 +111,7 @@ def main():
                         help = 'footpedal topic name (default: /IO/IO1/coag)')
     args = parser.parse_args(argv)
 
+    ral = crtk.ral(f'dvrk_mtm_test_{args.arm.lower()}')
     application = example_application(ral, args.arm, args.pedal)
     ral.spin_and_execute(application.run)
 

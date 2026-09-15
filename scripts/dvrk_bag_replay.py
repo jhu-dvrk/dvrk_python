@@ -106,7 +106,7 @@ parser.add_argument('-j', '--jaw', action = 'store_true',
 
 args = parser.parse_args(argv)
 
-ral = crtk.ral('dvrk_bag_replay')
+ral = crtk.ral(f'dvrk_bag_replay_{args.arm.lower()}')
 ral.spin()
 
 is_cp = (args.mode == 'servo_cp')

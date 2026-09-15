@@ -389,7 +389,7 @@ if __name__ == '__main__':
                         help = 'time interval/period to run at - should be as long as console\'s period to prevent timeouts')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_python_teleoperation')
+    ral = crtk.ral(f'dvrk_python_teleoperation_{args.mtm.lower()}_{args.psm.lower()}')
     mtm = MTM(ral, args.mtm, timeout=4*args.interval)
     psm = PSM(ral, args.psm, timeout=4*args.interval)
     application = teleoperation(ral, mtm, psm, args.clutch, args.interval,

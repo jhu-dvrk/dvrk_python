@@ -71,7 +71,7 @@ parser.add_argument('-i', '--interval', type = float, default = 0.01,
 
 args = parser.parse_args(argv)
 
-ral = crtk.ral('dvrk_psm_ecm_registration')
+ral = crtk.ral(f'dvrk_psm_ecm_registration_{args.arm.lower()}')
 
 # create PSM and ECM
 psm = simple_psm(ral = ral.create_child(args.arm),

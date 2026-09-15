@@ -66,6 +66,7 @@ if __name__ == '__main__':
                         help = 'console name as seen in the dVRK system application GUI or in ROS topics')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_console_test')
+    console_node_suffix = args.console.strip('/').replace('/', '_').lower()
+    ral = crtk.ral(f'dvrk_console_test_{console_node_suffix}')
     application = example_application(ral, args.console)
     ral.spin_and_execute(application.run)

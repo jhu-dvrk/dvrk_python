@@ -416,6 +416,6 @@ if __name__ == '__main__':
            ' -2- detemine orientation/scale of camera relative to PSM\n'
            ' -3- monitor the application while auto-calibration is performed for safety.\n\n')
 
-    ral = crtk.ral('dvrk_calibrate_potentiometer_psm_cv')
+    ral = crtk.ral(f'dvrk_calibrate_potentiometer_psm_cv_{args.arm.lower()}')
     application = calibration_psm_cv(ral, args.arm, args.config, args.interval, args.timeout, args.threshold)
     ral.spin_and_execute(application.run, args.swing_joint, args.range)

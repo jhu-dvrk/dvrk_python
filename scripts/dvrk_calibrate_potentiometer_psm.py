@@ -245,6 +245,6 @@ if __name__ == '__main__':
            ' -1- find a safe range of motion for the rocking movement\n'
            ' -2- adjust the depth so that the first hinge on the tool wrist is as close as possible to the RCM.\n\n')
 
-    ral = crtk.ral('dvrk_calibrate_potentiometer_psm')
+    ral = crtk.ral(f'dvrk_calibrate_potentiometer_psm_{args.arm.lower()}')
     application = calibration_psm(ral, args.arm, args.config, args.period)
     ral.spin_and_execute(application.run, args.swing_joint)

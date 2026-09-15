@@ -186,7 +186,7 @@ def main():
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_mtm_cartesian_impedance')
+    ral = crtk.ral(f'dvrk_mtm_cartesian_impedance_{args.arm.lower()}')
     application = example_application(ral, args.arm)
     ral.spin_and_execute(application.run)
 

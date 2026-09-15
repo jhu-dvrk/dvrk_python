@@ -99,6 +99,7 @@ if __name__ == '__main__':
                         help = 'PSM arm name that needs to be reset')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_reset_teleoperation')
+    arm_names = args.mtms + (args.psms or [])
+    ral = crtk.ral(f'dvrk_reset_teleoperation_{"_".join(arm_names).lower()}')
     application = reset_teleoperation(ral, args.console, args.mtms, args.psms)
     ral.spin_and_execute(application.run)

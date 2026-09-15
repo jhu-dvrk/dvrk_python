@@ -169,7 +169,7 @@ class example_application:
         # make sure the camera is past the cannula and tool vertical
         ts = 0.0;
         while ts == 0.0:
-            jp, ts = self.arm.setpoint_jp()
+            jp, ts = self.arm.setpoint_jp(wait_timeout=5.0)
         goal = numpy.copy(jp)
         if ((self.arm_name.endswith('PSM1')) or (self.arm_name.endswith('PSM2'))
             or (self.arm_name.endswith('PSM3')) or (self.arm_name.endswith('ECM'))):
@@ -293,7 +293,7 @@ if __name__ == '__main__':
                         help = 'period used for loops using servo commands')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_arm_test')
+    ral = crtk.ral(f'dvrk_arm_test_{args.arm.lower()}')
     application = example_application(ral, args.arm, args.period)
     ral.on_shutdown(application.on_shutdown)
     ral.spin_and_execute(application.run)

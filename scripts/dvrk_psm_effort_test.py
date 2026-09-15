@@ -166,6 +166,6 @@ if __name__ == '__main__':
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_psm_effort_test')
+    ral = crtk.ral(f'dvrk_psm_effort_test_{args.arm.lower()}')
     application = example_application(ral, args.arm)
     ral.spin_and_execute(application.run)

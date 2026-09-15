@@ -184,6 +184,6 @@ if __name__ == '__main__':
                         help = 'period used for loops using servo commands')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_psm_test')
+    ral = crtk.ral(f'dvrk_psm_test_{args.arm.lower()}')
     application = example_application(ral, args.arm, args.period)
     ral.spin_and_execute(application.run)

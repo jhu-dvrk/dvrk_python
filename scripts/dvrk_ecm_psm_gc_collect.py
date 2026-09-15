@@ -101,5 +101,5 @@ if __name__ == '__main__':
                         help = 'arm name corresponding to ROS topics without namespace.  Use __ns:= to specify the namespace')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_ecm_psm_gc_collect')
+    ral = crtk.ral(f'dvrk_ecm_psm_gc_collect_{args.arm.lower()}')
     ral.spin_and_execute(dvrk_ecm_psm_gc_collect, ral, args.arm)

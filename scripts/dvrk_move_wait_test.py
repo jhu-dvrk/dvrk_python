@@ -98,7 +98,6 @@ def main(ral, arm_name):
 
 if __name__ == "__main__":
     argv = crtk.ral.parse_argv(sys.argv[1:]) # skip argv[0], script name
-    ral = crtk.ral('dvrk_move_wait_test')
 
     # parse arguments
     parser = argparse.ArgumentParser()
@@ -108,5 +107,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args(argv)
 
+    ral = crtk.ral(f'dvrk_move_wait_test_{args.arm.lower()}')
     run = lambda: main(ral, args.arm)
     ral.spin_and_execute(run)

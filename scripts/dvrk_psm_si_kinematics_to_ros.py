@@ -132,6 +132,6 @@ if __name__ == '__main__':
                         help = 'kinematic file using json format for cisstRobot/robManipulator class')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_kinematics_to_ros')
+    ral = crtk.ral(f'dvrk_kinematics_to_ros_{args.arm.lower()}')
     application = example_application(ral, args.arm, args.interval, args.kinematic.name, args.mounting_pitch)
     ral.spin_and_execute(application.run)

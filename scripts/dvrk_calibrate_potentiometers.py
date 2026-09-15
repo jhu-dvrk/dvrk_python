@@ -364,6 +364,6 @@ if __name__ == '__main__':
                         help = 'arm IO config file, i.e. something like sawRobotIO1394-xwz-12345.json')
     args = parser.parse_args(argv)
 
-    ral = crtk.ral('dvrk_calibrate_potentiometers')
+    ral = crtk.ral(f'dvrk_calibrate_potentiometers_{args.arm.lower()}')
     application = potentiometer_calibration(ral, args.arm, args.IO_name)
     ral.spin_and_execute(application.run, args.type, args.config)
